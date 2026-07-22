@@ -463,9 +463,6 @@ def quota_state(store: UsageEntryStore | None = None) -> dict[str, Any]:
             )
         }
         used_percent = bucket_row.get("used_percent")
-        # Additive: the UI displays remaining quota (TASK 1), but storage/other API
-        # consumers keep reading used_percent unchanged.
-        bucket_row["remaining_percent"] = None if used_percent is None else round(100.0 - float(used_percent), 4)
         providers[provider]["buckets"].append(bucket_row)
 
     providers["codex"]["plan"] = _codex_plan_label(providers["codex"]["plan"])

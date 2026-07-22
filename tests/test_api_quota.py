@@ -445,7 +445,7 @@ def test_stale_token_banner_clears_after_successful_api_poll():
     assert codex["status"] == "ok"
 
 
-def test_get_quota_exposes_remaining_percent_alongside_used_percent():
+def test_get_quota_returns_stored_used_percent():
     from tokdash.sources.quota.types import QuotaSnapshot
     from tokdash.usage_store import UsageEntryStore
 
@@ -460,9 +460,7 @@ def test_get_quota_exposes_remaining_percent_alongside_used_percent():
     )
 
     bucket = api.get_quota()["providers"]["codex"]["buckets"][0]
-
     assert bucket["used_percent"] == 99.0
-    assert bucket["remaining_percent"] == 1.0
 
 
 def test_stale_token_banner_shows_when_failure_is_newest():

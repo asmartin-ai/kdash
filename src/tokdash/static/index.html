@@ -1732,7 +1732,7 @@
       <section class="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <div class="surface p-5">
           <div class="flex items-center justify-between mb-3">
-            <h3 class="text-base font-extrabold mono" data-i18n="utilizationHistory">Remaining History</h3>
+            <h3 class="text-base font-extrabold mono" data-i18n="utilizationHistory">Usage History</h3>
             <div class="text-xs" style="color: var(--color-muted);">%</div>
           </div>
           <div class="h-[280px]">
@@ -2027,7 +2027,7 @@
         quota: 'Quota',
         pricingDb: 'Pricing',
         subscriptionQuota: 'Subscription Quota',
-        utilizationHistory: 'Remaining History',
+        utilizationHistory: 'Usage History',
         consumptionHistory: 'Consumption History',
         consumptionUnit: 'percent used',
         quotaConsumptionEstimated: 'Estimated from local session logs — approximate and may be wrong. Enable Codex API polling for accurate quota.',
@@ -2063,7 +2063,7 @@
         quotaStaleToken: 'Sign-in token expired — open {app} once to refresh it. Tokdash never refreshes tokens itself.',
         quotaProviderIssue: 'Unable to refresh quota ({status}). Last checked {time}.',
         quotaUpdatedAgo: 'Updated {time}',
-        quotaRemainingPct: '{pct}% left',
+        quotaUsedPct: '{pct}% used',
         quotaActionSaving: 'Saving…',
         quotaActionSaved: 'Saved',
         quotaActionFailed: 'Failed to save',
@@ -2295,7 +2295,7 @@
         quotaStaleToken: '登录令牌已过期 — 请打开一次 {app} 以刷新它。Tokdash 不会自动刷新令牌。',
         quotaProviderIssue: '无法刷新额度（{status}）。上次检查时间：{time}。',
         quotaUpdatedAgo: '更新于 {time}',
-        quotaRemainingPct: '剩余 {pct}%',
+        quotaUsedPct: '已用 {pct}%',
         quotaActionSaving: '保存中…',
         quotaActionSaved: '已保存',
         quotaActionFailed: '保存失败',
@@ -4666,21 +4666,13 @@
       el.textContent = '';
     }
 
-    // TASK 1: the card displays REMAINING quota, not used. Storage/API keep used_percent;
-    // remaining is a display-only inversion (100 - used_percent). Thresholds are the exact
-    // inverse of the old used>75/used>90 severity bands (used>90 <=> remaining<10, etc.),
-    // so the same color tokens fire at the same real utilization levels as before.
-    function quotaRemainingPercent(bucket) {
-      const used = bucket && bucket.used_percent;
-      if (used === null || used === undefined) return null;
-      return Math.max(0, Math.min(100, 100 - Number(used)));
-    }
-
-    function quotaRemainingColor(remaining) {
-      const pct = Number(remaining);
+    // TASK 1 (reversed 2026-07-22): the card now displays USED quota (like omp usage),
+    // not remaining. Color thresholds: used > 90 → red, used > 75 → orange, else primary.
+    function quotaUsedColor(used) {
+      const pct = Number(used);
       if (!Number.isFinite(pct)) return 'var(--color-primary)';
-      if (pct <= 10) return '#DC2626';
-      if (pct <= 25) return '#D97706';
+      if (pct >= 90) return '#DC2626';
+      if (pct >= 75) return '#D97706';
       return 'var(--color-primary)';
     }
 
@@ -4765,11 +4757,12 @@
         sourceTag.title = t('sourceSessionTitle');
         label.appendChild(sourceTag);
       }
-      const remaining = quotaRemainingPercent(bucket);
+      const used = bucket && bucket.used_percent !== null && bucket.used_percent !== undefined
+        ? Number(bucket.used_percent) : null;
       const pct = document.createElement('span');
       pct.className = 'mono font-extrabold';
-      pct.style.color = remaining === null ? 'var(--color-muted)' : quotaRemainingColor(remaining);
-      pct.textContent = remaining === null ? '—' : t('quotaRemainingPct').replace('{pct}', remaining.toFixed(1));
+      pct.style.color = used === null ? 'var(--color-muted)' : quotaUsedColor(used);
+      pct.textContent = used === null ? '—' : t('quotaUsedPct').replace('{pct}', used.toFixed(1));
       top.appendChild(label);
       top.appendChild(pct);
 
@@ -4778,8 +4771,8 @@
       bar.style.background = 'color-mix(in srgb, var(--color-text) 10%, transparent)';
       const fill = document.createElement('div');
       fill.className = 'h-full rounded-full';
-      fill.style.width = `${remaining === null ? 0 : remaining}%`;
-      fill.style.background = remaining === null ? 'var(--color-primary)' : quotaRemainingColor(remaining);
+      fill.style.width = `${used === null ? 0 : used}%`;
+      fill.style.background = used === null ? 'var(--color-primary)' : quotaUsedColor(used);
       bar.appendChild(fill);
 
       const sub = document.createElement('div');
@@ -4831,14 +4824,15 @@
 
     function antigravityPoolBucket(buckets, pool) {
       let best = null;
-      let bestRemaining = null;
+      let bestUsed = -1;
       buckets.forEach((bucket) => {
         const name = String(bucket.bucket_label || bucket.bucket || '').toLowerCase();
         if (!pool.test(name)) return;
-        const remaining = quotaRemainingPercent(bucket);
-        if (remaining === null) return;
-        if (bestRemaining === null || remaining < bestRemaining) {
-          bestRemaining = remaining;
+        const used = bucket && bucket.used_percent !== null && bucket.used_percent !== undefined
+          ? Number(bucket.used_percent) : null;
+        if (used === null) return;
+        if (used > bestUsed) {
+          bestUsed = used;
           best = bucket;
         }
       });
@@ -5221,11 +5215,11 @@
       // each touched once via a cheap .map(); formatQuotaAxisLabel (the expensive
       // toLocaleString call) fires only from the axis tick callback (bounded by
       // maxTicksLimit) and the tooltip title (once per hover), never per-datapoint.
-      // TASK 1: this chart plots REMAINING quota (100 - used_percent), matching the
-      // bucket rows above.
+      // TASK 1 (reversed 2026-07-22): chart now plots USED quota, matching the card bars.
+      // Previously plotted 100 - used_percent ("remaining").
       const utilizationDatasets = series.map((item, index) => ({
         label: quotaSeriesLabel(item),
-        data: (item.points || []).map((p) => ({ x: p.captured_at * 1000, y: p.used_percent === null || p.used_percent === undefined ? null : 100 - p.used_percent })),
+        data: (item.points || []).map((p) => ({ x: p.captured_at * 1000, y: p.used_percent === null || p.used_percent === undefined ? null : p.used_percent })),
         borderColor: palette[index % palette.length],
         backgroundColor: palette[index % palette.length] + '33',
         stepped: 'before',
