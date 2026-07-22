@@ -53,3 +53,19 @@ claude/zai/codex API replaced with omp.*
 - The `clinepass-implementer.md` Zcode subagent at `~/.zcode/agents/` is
   wired but blocked on ClinePass's DS V4 Flash route returning empty
   content.
+- **Add ZCode as an upstream-supported tool**: ZCode writes per-session
+  `transcript.jsonl` + `metadata.json` under `~/.zcode/cli/agents/sess_*/`
+  — a stable, documented format.  The kdash fork already has the path
+  resolution (`clientpaths.zcode_root()`, `zcode_transcript_glob()`,
+  `zcode_metadata_glob()`).  Still needed: a `ZcodeParser(BaseParser)` in
+  `coding_tools.py`, a session handler in `sessions.py`, and the `zcode`
+  entry in `SESSION_TOOLS` / the `--sources` default list.  A PR to
+  upstream JingbiaoMei/tokdash adding this (alongside our existing
+  OpenCode/Codex/Claude parsers) would make the fork unnecessary for this
+  feature.
+- **Add Zed as an upstream-supported tool**: Zed stores agent-thread
+  token usage in `threads/threads.db` (SQLite with serialized thread JSON
+  blobs).  The kdash fork has path resolution (`clientpaths.zed_data_dir()`,
+  `zed_threads_db_paths()`, `zed_db_dirs()`).  A parser is more involved
+  than JSONL (it's a SQLite DB), but paves the way for every Zed user.
+  Same PR track as ZCode.
