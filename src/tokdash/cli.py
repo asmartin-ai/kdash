@@ -81,7 +81,7 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
         "command",
         nargs="?",
         default="serve",
-        choices=["serve", "export", "db", "quota", "version", "setup", "doctor", "update", "uninstall"],
+        choices=["serve", "export", "db", "quota", "version", "setup", "doctor", "update", "uninstall", "glance"],
         help="Command (default: serve)",
     )
     parser.add_argument(
@@ -158,6 +158,19 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
     parser.add_argument("--claude-api", choices=["on", "off"], help="For `tokdash quota consent`: enable/disable Claude API quota polling.")
     parser.add_argument("--antigravity-api", choices=["on", "off"], help="For `tokdash quota consent`: enable/disable Antigravity API quota polling.")
     parser.add_argument("--enabled", choices=["on", "off"], help="For `tokdash quota consent`: master switch for all quota tracking.")
+
+    # Glance options (kdash TUI dashboard)
+    parser.add_argument(
+        "--watch", "-w",
+        action="store_true",
+        help="Glance: top-like alt-screen dashboard (refresh in-place)",
+    )
+    parser.add_argument(
+        "--interval", "-n",
+        type=int,
+        default=None,
+        help="Glance: watch refresh interval in seconds (default: 120)",
+    )
     parser.add_argument(
         "--poll-interval",
         type=int,
@@ -864,6 +877,18 @@ def cli(argv: list[str] | None = None, prog: str = "tokdash") -> int:
 
     if args.command == "quota":
         return quota_command(args)
+
+    if args.command == "glance":
+        # kdash TUI: a top-like alt-screen dashboard with provider meters.
+        from .glance import main as glance_main
+        watch = getattr(args, "watch", False)
+        interval = getattr(args, "interval", None)
+        argv = []
+        if watch:
+            argv.append("--watch")
+        if interval is not None:
+            argv.extend(["--interval", str(interval)])
+        return glance_main(argv)
 
     parser.error(f"Unknown command: {args.command}")
     return 2

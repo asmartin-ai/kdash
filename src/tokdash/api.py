@@ -969,6 +969,164 @@ def refresh_quota() -> Dict[str, Any]:
     return {"snapshots": len(snapshots), "inserted": inserted}
 
 
+# --- kdash: /api/suggest -------------------------------------------------------
+# Plan-to-model routing policy brain. Reads live provider peak % (and optional
+# ZenMux subscription/flow counts) and emits a single pick + fallbacks + tiers +
+# NOW line. Routes via the same tokdash.suggest module that the TUI uses, so the
+# web Suggest tab and the TUI SUGGEST rail are guaranteed to agree.
+
+
+@app.get("/api/suggest")
+def get_suggest(refresh: bool = False) -> Dict[str, Any]:
+    """Plan → model suggestions (Starter / free / trial routing).
+
+    Policy table from ``tokdash.suggest``. Shaped by local Claude quota peaks
+    and optional live ZenMux subscription/detail when a management key is set.
+
+    Query:
+      ``refresh=1`` / ``refresh=true`` — skip the 600s route cache and recompute
+      (used by the dashboard Reload button). Read-only; no writes.
+    """
+
+    def fetch() -> Dict[str, Any]:
+        from .suggest import build_suggest
+
+        zenmux_peak = claude_peak = cline_peak = zai_peak = codex_peak = None
+        codex_plan = None
+        try:
+            from .sources.quota import quota_state
+
+            q = quota_state() or {}
+            providers = q.get("providers") or q.get("data") or {}
+            if isinstance(providers, dict):
+                for key in ("claude", "codex", "zai", "z.ai", "cline", "clinepass"):
+                    block = providers.get(key) or {}
+                    if not isinstance(block, dict):
+                        continue
+                    peak = _peak_from_quota_block(block)
+                    k = key.lower()
+                    if k == "codex":
+                        if block.get("plan"):
+                            codex_plan = str(block.get("plan"))
+                        if peak is not None:
+                            codex_peak = peak if codex_peak is None else max(codex_peak, peak)
+                        continue
+                    if peak is None:
+                        continue
+                    if k == "claude":
+                        claude_peak = peak if claude_peak is None else max(claude_peak, peak)
+                    elif k in {"cline", "clinepass"}:
+                        cline_peak = peak if cline_peak is None else max(cline_peak, peak)
+                    elif k in {"zai", "z.ai"}:
+                        zai_peak = peak if zai_peak is None else max(zai_peak, peak)
+        except Exception:
+            pass
+
+        zenmux_rem5 = zenmux_rem7 = zenmux_max5 = zenmux_max7 = None
+        zenmux_end = None
+        try:
+            from .glance import glance_zenmux
+
+            # glance_zenmux renders to its own frame buffer; a thin probe fetches the
+            # same fields without rendering. We re-derive what we can from the local
+            # cache via the standard web quota path: the upstream /api/quota already
+            # exposes ZenMux flows in the "zenmux" block when it's enabled.
+            from .sources.quota import quota_state as _qstate
+
+            qz = _qstate() or {}
+            zm = (qz.get("providers") or {}).get("zenmux") or {}
+            zm_buckets = zm.get("buckets") if isinstance(zm, dict) else []
+            if isinstance(zm_buckets, list):
+                for b in zm_buckets:
+                    if not isinstance(b, dict):
+                        continue
+                    label = str(b.get("bucket") or "").lower()
+                    raw = str(b.get("raw") or "") + " " + str(b.get("bucket_label") or "")
+                    import re as _re
+                    fl = _re.search(r"([\d.]+)\s*/\s*([\d.]+)\s*fl", raw)
+                    if fl and "5" in label:
+                        zenmux_rem5 = float(fl.group(1))
+                        zenmux_max5 = float(fl.group(2))
+                    elif fl and "7" in label:
+                        zenmux_rem7 = float(fl.group(1))
+                        zenmux_max7 = float(fl.group(2))
+            if zm.get("updated_at"):
+                zenmux_end = None  # not exposed; leave None so suggest omits it
+        except Exception:
+            pass
+
+        return build_suggest(
+            zenmux_peak_pct=zenmux_peak,
+            claude_peak_pct=claude_peak,
+            clinepass_peak_pct=cline_peak,
+            zai_peak_pct=zai_peak,
+            codex_peak_pct=codex_peak,
+            codex_plan=codex_plan,
+            zenmux_rem5=zenmux_rem5,
+            zenmux_rem7=zenmux_rem7,
+            zenmux_max5=zenmux_max5,
+            zenmux_max7=zenmux_max7,
+        )
+
+    # 10-minute response cache: the suggest payload is purely a function of the
+    # current quota state, which is already cached/quota_state has its own
+    # 30 s default). 600 s is the upper bound on how stale the dashboard is
+    # willing to look after a manual refresh.
+    if not refresh:
+        cached = _suggest_cache_get()
+        if cached is not None:
+            return cached
+    payload = fetch()
+    if refresh:
+        _suggest_cache_set(payload)
+    else:
+        _suggest_cache_set(payload)
+    return payload
+
+
+_SUGGEST_CACHE: Dict[str, Any] = {}
+_SUGGEST_CACHE_AT: float = 0.0
+_SUGGEST_CACHE_TTL_S = 600.0
+
+
+def _suggest_cache_get() -> Dict[str, Any] | None:
+    import time as _t
+    if not _SUGGEST_CACHE:
+        return None
+    if (_t.time() - _SUGGEST_CACHE_AT) > _SUGGEST_CACHE_TTL_S:
+        return None
+    return _SUGGEST_CACHE
+
+
+def _suggest_cache_set(payload: Dict[str, Any]) -> None:
+    import time as _t
+    global _SUGGEST_CACHE_AT
+    _SUGGEST_CACHE.clear()
+    _SUGGEST_CACHE.update(payload)
+    _SUGGEST_CACHE_AT = _t.time()
+
+
+def _peak_from_quota_block(block: Dict[str, Any]) -> float | None:
+    """Reduce a quota block (from /api/quota providers dict) to its peak usage %."""
+    buckets = block.get("buckets") if isinstance(block, dict) else None
+    if not isinstance(buckets, list):
+        return None
+    peak: float | None = None
+    for b in buckets:
+        if not isinstance(b, dict):
+            continue
+        used = b.get("used_percent")
+        if used is None:
+            continue
+        try:
+            v = float(used)
+        except (TypeError, ValueError):
+            continue
+        if peak is None or v > peak:
+            peak = v
+    return peak
+
+
 @app.get("/api/codex/sessions")
 def get_codex_sessions(period: str = "today", include_review_sessions: Optional[bool] = None) -> Dict[str, Any]:
     try:
