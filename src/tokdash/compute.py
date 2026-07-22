@@ -813,11 +813,13 @@ def _current_period_range(period: str) -> tuple[datetime, datetime]:
 def _compute_previous_period_range(period: str) -> tuple[datetime, datetime]:
     current_since, current_until = _current_period_range(period)
     if period == "month":
+        # Anchor calendar math on the UTC value directly (current_since is already a clean
+        # UTC midnight at the month boundary). Calling .astimezone() with no arg converts
+        # to local time (-06:00 on US Central), shifting prev_since to the next UTC day.
         prev_until = current_since
-        prev_until_local = prev_until.astimezone()
-        prev_month_anchor = prev_until_local - timedelta(days=1)
-        prev_since_local = prev_month_anchor.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
-        return prev_since_local.astimezone(timezone.utc), prev_until
+        prev_month_anchor = prev_until - timedelta(days=1)
+        prev_since = prev_month_anchor.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+        return prev_since, prev_until
 
     if period_to_days(period) == 1:
         prev_since = current_since - timedelta(days=1)
