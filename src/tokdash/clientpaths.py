@@ -181,6 +181,94 @@ def hermes_search_dirs() -> List[Path]:
     return [Path.home() / ".hermes"]
 
 
+# --- ZCode -------------------------------------------------------------------
+
+def zcode_root() -> Path:
+    """``$ZCODE_HOME`` if set, else ``~/.zcode``."""
+    explicit = os.environ.get("ZCODE_HOME", "").strip()
+    return Path(explicit).expanduser() if explicit else Path.home() / ".zcode"
+
+
+def zcode_transcript_glob(root: Optional[Path] = None) -> str:
+    root = root if root is not None else zcode_root()
+    return str(root / "cli" / "agents" / "sess_*" / "agent_*" / "transcript.jsonl")
+
+
+def zcode_metadata_glob(root: Optional[Path] = None) -> str:
+    root = root if root is not None else zcode_root()
+    return str(root / "cli" / "agents" / "sess_*" / "agent_*" / "metadata.json")
+
+
+# --- LiteLLM proxy ------------------------------------------------------------
+
+def litellm_proxy_usage_jsonl_paths() -> List[Path]:
+    """Structured LiteLLM proxy usage sidecar paths.
+
+    LiteLLM's default access log lines do not contain token usage. Tokdash reads a
+    JSONL sidecar written by a LiteLLM custom callback. The path can be overridden
+    with any of these env vars (comma-separated for multiple proxy instances):
+
+    * ``TOKDASH_LITELLM_PROXY_JSONL``
+    * ``LITELLM_TOKDASH_JSONL``
+    * ``LITELLM_PROXY_USAGE_JSONL``
+    """
+    explicit = (
+        os.environ.get("TOKDASH_LITELLM_PROXY_JSONL", "").strip()
+        or os.environ.get("LITELLM_TOKDASH_JSONL", "").strip()
+        or os.environ.get("LITELLM_PROXY_USAGE_JSONL", "").strip()
+    )
+    if explicit:
+        return [Path(p.strip()).expanduser() for p in explicit.split(",") if p.strip()]
+
+    paths = [tokdash_data_dir() / "litellm-proxy-usage.jsonl"]
+    return paths
+
+
+# --- Zed ----------------------------------------------------------------------
+
+def zed_data_dir() -> Path:
+    """``$ZED_DATA_DIR`` if set, else Zed's per-platform data directory."""
+    explicit = os.environ.get("ZED_DATA_DIR", "").strip()
+    if explicit:
+        return Path(explicit).expanduser()
+
+    if osinfo.is_windows():
+        base = os.environ.get("LOCALAPPDATA") or (Path.home() / "AppData" / "Local")
+        return Path(base) / "Zed"
+    if osinfo.is_macos():
+        return Path.home() / "Library" / "Application Support" / "Zed"
+
+    xdg_data_home = os.environ.get("XDG_DATA_HOME", "").strip()
+    base = Path(xdg_data_home).expanduser() if xdg_data_home else Path.home() / ".local" / "share"
+    return base / "zed"
+
+
+def zed_threads_db_paths() -> List[Path]:
+    """Zed agent thread DB paths.
+
+    Override with ``ZED_THREADS_DB_PATH`` (comma-separated). Current Zed builds
+    persist agent-thread token usage inside ``threads/threads.db`` as serialized
+    thread JSON blobs.
+    """
+    explicit = os.environ.get("ZED_THREADS_DB_PATH", "").strip()
+    if explicit:
+        return [Path(p.strip()).expanduser() for p in explicit.split(",") if p.strip()]
+    return [zed_data_dir() / "threads" / "threads.db"]
+
+
+def zed_db_dirs() -> List[Path]:
+    """Zed workspace DB dirs.
+
+    Override with ``ZED_DB_DIR`` (comma-separated). These DBs currently provide
+    sidebar/workspace metadata; the Zed parser scans them defensively for future
+    token-usage tables but does not text-log-scrape Zed.log.
+    """
+    explicit = os.environ.get("ZED_DB_DIR", "").strip()
+    if explicit:
+        return [Path(p.strip()).expanduser() for p in explicit.split(",") if p.strip()]
+    return [zed_data_dir() / "db"]
+
+
 # --- Tokdash data dir / usage DB -------------------------------------------------
 #
 # Mirrors onboard/paths.py::data_dir() (kept as a separate, untouched copy there —
