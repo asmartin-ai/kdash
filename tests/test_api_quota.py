@@ -37,7 +37,7 @@ def test_get_quota_returns_stored_codex_session_data_without_collecting(monkeypa
     assert payload["providers"]["codex"]["network_enabled"] is False
     assert payload["providers"]["codex"]["buckets"][0]["bucket"] == "5h"
     assert payload["providers"]["codex"]["buckets"][0]["used_percent"] == 50.0
-    assert payload["consent"] == {"codex_api": False, "claude_api": False, "clinepass_api": False, "zai_api": False}
+    assert payload["consent"] == {"codex_api": False, "claude_api": False, "clinepass_api": False, "zai_api": False, "zenmux_api": False}
 
 
 def test_get_quota_does_not_call_network_collectors(monkeypatch):
@@ -71,7 +71,7 @@ def test_quota_consent_route_persists_provider_flags():
     api._clear_cache()
     payload = api.set_quota_consent({"codex_api": True, "claude_api": False})
 
-    assert payload["consent"] == {"codex_api": True, "claude_api": False, "clinepass_api": False, "zai_api": False}
+    assert payload["consent"] == {"codex_api": True, "claude_api": False, "clinepass_api": False, "zai_api": False, "zenmux_api": False}
     assert api.get_quota()["consent"]["codex_api"] is True
 
 

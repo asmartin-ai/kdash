@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 
 import pytest
 
-from tokdash.sources.quota import antigravity, claude, clinepass, codex, zai
+from tokdash.sources.quota import antigravity, claude, clinepass, codex, zai, zenmux
 from tokdash.usage_store import _codex_window_used_percent_from_raw
 
 _FIXTURE_DIR = Path(__file__).parent / "fixtures" / "quota"
@@ -1014,3 +1014,130 @@ def test_zai_api_stale_token_on_401(monkeypatch):
     assert snapshots[0].status == "stale_token"
     assert snapshots[0].provider == "zai"
     assert snapshots[0].source == "zai_api"
+
+
+def test_zenmux_api_parses_5h_7d_buckets(monkeypatch):
+    monkeypatch.setenv("ZENMUX_MANAGEMENT_API_KEY", "test-zenmux-key")
+    sub_payload = {
+        "data": {
+            "plan": {"tier": "pro", "expires_at": "2026-08-01T00:00:00Z"},
+            "account_status": "active",
+            "quota_5_hour": {
+                "usage_percentage": 0.077,
+                "remaining_flows": 46,
+                "max_flows": 50,
+                "used_value_usd": 1.23,
+                "max_value_usd": 20.0,
+                "resets_at": "2026-07-21T05:34:00Z",
+            },
+            "quota_7_day": {
+                "usage_percentage": 0.227,
+                "remaining_flows": 309,
+                "max_flows": 400,
+                "used_value_usd": 12.5,
+                "max_value_usd": 50.0,
+                "resets_at": "2026-07-26T13:00:00Z",
+            },
+        }
+    }
+    seen_urls = []
+    seen_auth = []
+
+    def opener(req, timeout=15):
+        seen_urls.append(req.full_url)
+        seen_auth.append(_header(req, "Authorization"))
+        if req.full_url.endswith("/subscription/detail"):
+            return FakeResponse(sub_payload)
+        # PAYG endpoint may be hit next; let it fall through to a fetch_error so the test
+        # remains focused on 5h/7d. (An empty body / non-dict response would also work.)
+        if req.full_url.endswith("/payg/balance"):
+            return FakeResponse({"data": {}})
+        raise AssertionError(f"unexpected url: {req.full_url}")
+
+    snapshots = zenmux.collect_zenmux_api_snapshots(opener=opener, now=1_782_907_200)
+
+    by_bucket = {s.bucket: s for s in snapshots}
+    assert set(by_bucket) == {"5h", "7d"}
+    assert by_bucket["5h"].used_percent == 7.7
+    assert by_bucket["5h"].bucket_label == "5-hour"
+    assert by_bucket["5h"].plan == "PRO"
+    assert by_bucket["5h"].resets_at == int(
+        datetime.fromisoformat("2026-07-21T05:34:00+00:00").timestamp()
+    )
+    assert by_bucket["5h"].raw.get("remaining_flows") == 46
+    assert by_bucket["5h"].raw.get("max_flows") == 50
+    assert by_bucket["7d"].used_percent == 22.7
+    assert by_bucket["7d"].bucket_label == "7-day"
+    assert by_bucket["7d"].resets_at == int(
+        datetime.fromisoformat("2026-07-26T13:00:00+00:00").timestamp()
+    )
+    assert all(s.provider == "zenmux" for s in snapshots)
+    assert all(s.source == "zenmux_api" for s in snapshots)
+    assert seen_urls == [
+        "https://zenmux.ai/api/v1/management/subscription/detail",
+        "https://zenmux.ai/api/v1/management/payg/balance",
+    ]
+    assert seen_auth == ["Bearer test-zenmux-key", "Bearer test-zenmux-key"]
+
+
+def test_zenmux_api_unavailable_when_key_unset(monkeypatch):
+    monkeypatch.delenv("ZENMUX_MANAGEMENT_API_KEY", raising=False)
+
+    snapshots = zenmux.collect_zenmux_api_snapshots(now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    assert snapshots[0].provider == "zenmux"
+    assert snapshots[0].source == "zenmux_api"
+    assert snapshots[0].status == "unavailable"
+    assert snapshots[0].bucket == "api"
+    assert snapshots[0].raw.get("error") == "ZENMUX_MANAGEMENT_API_KEY unset"
+
+
+def test_zenmux_api_stale_token_on_401(monkeypatch):
+    monkeypatch.setenv("ZENMUX_MANAGEMENT_API_KEY", "test-zenmux-key")
+
+    def opener(_req, timeout=15):
+        raise HTTPError("https://zenmux.ai/api/v1/management/subscription/detail", 401, "Unauthorized", {}, None)
+
+    snapshots = zenmux.collect_zenmux_api_snapshots(opener=opener, now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    assert snapshots[0].status == "stale_token"
+    assert snapshots[0].provider == "zenmux"
+    assert snapshots[0].source == "zenmux_api"
+
+
+def test_zenmux_api_includes_payg_bucket_when_available(monkeypatch):
+    monkeypatch.setenv("ZENMUX_MANAGEMENT_API_KEY", "test-zenmux-key")
+    sub_payload = {
+        "data": {
+            "plan": {"tier": "pro"},
+            "quota_5_hour": {"usage_percentage": 0.1, "resets_at": "2026-07-21T05:34:00Z"},
+            "quota_7_day": {"usage_percentage": 0.2, "resets_at": "2026-07-26T13:00:00Z"},
+        }
+    }
+    payg_payload = {"data": {"total_credits": 12.34}}
+    seen_urls = []
+
+    def opener(req, timeout=15):
+        seen_urls.append(req.full_url)
+        if req.full_url.endswith("/subscription/detail"):
+            return FakeResponse(sub_payload)
+        if req.full_url.endswith("/payg/balance"):
+            return FakeResponse(payg_payload)
+        raise AssertionError(f"unexpected url: {req.full_url}")
+
+    snapshots = zenmux.collect_zenmux_api_snapshots(opener=opener, now=1_782_907_200)
+
+    by_bucket = {s.bucket: s for s in snapshots}
+    assert set(by_bucket) == {"5h", "7d", "payg"}
+    payg = by_bucket["payg"]
+    assert payg.bucket_label == "PAYG credits"
+    assert payg.used_percent is None
+    assert payg.raw.get("balance") == 12.34
+    assert payg.raw.get("currency") == "USD"
+    assert payg.status == "ok"
+    assert seen_urls == [
+        "https://zenmux.ai/api/v1/management/subscription/detail",
+        "https://zenmux.ai/api/v1/management/payg/balance",
+    ]

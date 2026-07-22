@@ -8,16 +8,16 @@ from tokdash.sources.quota import config
 
 
 def test_quota_network_consent_defaults_off_and_round_trips(tmp_path):
-    assert config.read_quota_config() == {"codex_api": False, "claude_api": False, "clinepass_api": False, "zai_api": False}
+    assert config.read_quota_config() == {"codex_api": False, "claude_api": False, "clinepass_api": False, "zai_api": False, "zenmux_api": False}
 
     updated = config.set_quota_consent({"codex_api": True, "claude_api": True})
 
-    assert updated == {"codex_api": True, "claude_api": True, "clinepass_api": False, "zai_api": False}
+    assert updated == {"codex_api": True, "claude_api": True, "clinepass_api": False, "zai_api": False, "zenmux_api": False}
     assert config.read_quota_config() == updated
 
 
 def test_quota_kill_switch_disables_network_even_with_saved_consent(monkeypatch):
-    config.set_quota_consent({"codex_api": True, "claude_api": True, "clinepass_api": True, "zai_api": True})
+    config.set_quota_consent({"codex_api": True, "claude_api": True, "clinepass_api": True, "zai_api": True, "zenmux_api": True})
 
     monkeypatch.setenv("TOKDASH_QUOTA_POLL", "0")
 
@@ -37,7 +37,7 @@ def test_quota_config_preserves_unrelated_config_keys():
 
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert saved["update_check"] is True
-    assert saved["quota"] == {"codex_api": False, "claude_api": False, "clinepass_api": True, "zai_api": False}
+    assert saved["quota"] == {"codex_api": False, "claude_api": False, "clinepass_api": True, "zai_api": False, "zenmux_api": False}
 
 
 def test_poll_interval_precedence_env_over_config_over_default(monkeypatch):

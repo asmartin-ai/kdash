@@ -999,7 +999,7 @@ def get_suggest(refresh: bool = False) -> Dict[str, Any]:
             q = quota_state() or {}
             providers = q.get("providers") or q.get("data") or {}
             if isinstance(providers, dict):
-                for key in ("claude", "codex", "zai", "z.ai", "cline", "clinepass"):
+                for key in ("claude", "codex", "zai", "z.ai", "cline", "clinepass", "zenmux"):
                     block = providers.get(key) or {}
                     if not isinstance(block, dict):
                         continue
@@ -1019,18 +1019,16 @@ def get_suggest(refresh: bool = False) -> Dict[str, Any]:
                         cline_peak = peak if cline_peak is None else max(cline_peak, peak)
                     elif k in {"zai", "z.ai"}:
                         zai_peak = peak if zai_peak is None else max(zai_peak, peak)
+                    elif k == "zenmux":
+                        zenmux_peak = peak if zenmux_peak is None else max(zenmux_peak, peak)
         except Exception:
             pass
 
         zenmux_rem5 = zenmux_rem7 = zenmux_max5 = zenmux_max7 = None
         zenmux_end = None
         try:
-            from .glance import glance_zenmux
-
-            # glance_zenmux renders to its own frame buffer; a thin probe fetches the
-            # same fields without rendering. We re-derive what we can from the local
-            # cache via the standard web quota path: the upstream /api/quota already
-            # exposes ZenMux flows in the "zenmux" block when it's enabled.
+            # ZenMux is now a regular quota source: read flow counts straight from the
+            # structured bucket rows instead of regexing the rendered glance output.
             from .sources.quota import quota_state as _qstate
 
             qz = _qstate() or {}
@@ -1040,16 +1038,14 @@ def get_suggest(refresh: bool = False) -> Dict[str, Any]:
                 for b in zm_buckets:
                     if not isinstance(b, dict):
                         continue
-                    label = str(b.get("bucket") or "").lower()
-                    raw = str(b.get("raw") or "") + " " + str(b.get("bucket_label") or "")
-                    import re as _re
-                    fl = _re.search(r"([\d.]+)\s*/\s*([\d.]+)\s*fl", raw)
-                    if fl and "5" in label:
-                        zenmux_rem5 = float(fl.group(1))
-                        zenmux_max5 = float(fl.group(2))
-                    elif fl and "7" in label:
-                        zenmux_rem7 = float(fl.group(1))
-                        zenmux_max7 = float(fl.group(2))
+                    bucket = str(b.get("bucket") or "")
+                    raw = b.get("raw") if isinstance(b.get("raw"), dict) else {}
+                    if bucket == "5h":
+                        zenmux_rem5 = raw.get("remaining_flows")
+                        zenmux_max5 = raw.get("max_flows")
+                    elif bucket == "7d":
+                        zenmux_rem7 = raw.get("remaining_flows")
+                        zenmux_max7 = raw.get("max_flows")
             if zm.get("updated_at"):
                 zenmux_end = None  # not exposed; leave None so suggest omits it
         except Exception:

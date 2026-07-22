@@ -22,6 +22,7 @@ from .codex import collect_codex_session_snapshots_incremental
 from .codex import collect_codex_api_snapshots
 from .types import QuotaSnapshot
 from .zai import collect_zai_api_snapshots
+from .zenmux import collect_zenmux_api_snapshots
 
 _CURRENT_SNAPSHOTS: list[QuotaSnapshot] = []
 _LAST_POLL_AT: int | None = None
@@ -61,6 +62,8 @@ def collect_network_snapshots(sources: Iterable[str] | None = None) -> list[Quot
             snapshots.extend(collect_clinepass_api_snapshots())
         elif key == "zai_api":
             snapshots.extend(collect_zai_api_snapshots())
+        elif key == "zenmux_api":
+            snapshots.extend(collect_zenmux_api_snapshots())
         # antigravity_api branch DISABLED 2026-07-22. Re-enable by uncommenting:
         # elif key == "antigravity_api":
         #     snapshots.extend(collect_antigravity_api_snapshots())
@@ -317,6 +320,7 @@ def _network_key_for_provider(name: str) -> str:
         "claude": "claude_api",
         "clinepass": "clinepass_api",
         "zai": "zai_api",
+        "zenmux": "zenmux_api",
         # "antigravity": "antigravity_api",  # DISABLED 2026-07-22 — re-enable to restore
     }.get(name, f"{name}_api")
 
@@ -361,7 +365,7 @@ def quota_state(store: UsageEntryStore | None = None) -> dict[str, Any]:
 
     consent = quota_network_consent()
     # "antigravity" removed from the default shell list 2026-07-22 (no active sub).
-    providers = {name: _provider_shell(name, consent) for name in ("codex", "claude", "clinepass", "zai")}
+    providers = {name: _provider_shell(name, consent) for name in ("codex", "claude", "clinepass", "zai", "zenmux")}
     last_network_run: int | None = _LAST_POLL_AT
     # When Codex API polling is enabled, the API is the sole oracle for the current-quota
     # cards: codex_session rows are excluded from bucket selection below so a newer cached
