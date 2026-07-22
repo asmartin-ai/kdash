@@ -1,6 +1,13 @@
 from __future__ import annotations
 
+import os
 import pytest
+
+# Prevent browser opens during the entire test run.  tokdash's _has_display()
+# reads CI (returns False if set) and on Windows default-assumes a GUI is
+# present.  Setting CI=true at module-load time (before any test imports) stops
+# every webbrowser.open() timer from ever firing.
+os.environ["CI"] = "true"
 
 
 @pytest.fixture(autouse=True)
