@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import base64
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 from urllib.error import HTTPError
 
 import pytest
 
-from tokdash.sources.quota import antigravity, claude, codex
+from tokdash.sources.quota import antigravity, claude, clinepass, codex, zai
 from tokdash.usage_store import _codex_window_used_percent_from_raw
 
 _FIXTURE_DIR = Path(__file__).parent / "fixtures" / "quota"
@@ -873,3 +874,143 @@ def test_codex_api_window_used_percent_round_trips_from_raw(monkeypatch, tmp_pat
     # Guards against a future refactor that silently stops producing snapshots (e.g. an
     # opener/bucket-filter mismatch) making this test vacuously pass with zero assertions.
     assert saw >= 1
+
+
+def test_clinepass_api_parses_limits_shape(monkeypatch):
+    monkeypatch.setenv("CLINE_API_KEY", "test-cline-key")
+    plan_payload = {
+        "data": {
+            "plan": {"displayName": "Cline Pass Pro", "name": "cline_pass_pro"},
+            "currentPeriodEnd": "2026-08-01T00:00:00Z",
+        }
+    }
+    limits_payload = {
+        "data": {
+            "limits": [
+                {"type": "five_hour", "percentUsed": 33, "resetsAt": "2026-07-21T20:00:00Z"},
+                {"type": "weekly", "percentUsed": 12, "resetsAt": 1_787_160_000},
+                {"type": "monthly", "percentUsed": 5, "resetsAt": 1_789_920_000},
+            ]
+        }
+    }
+    me_payload = {"data": {"id": "user-1"}}
+    seen_urls = []
+
+    def opener(req, timeout=15):
+        seen_urls.append(req.full_url)
+        if req.full_url.endswith("/users/me/plan"):
+            return FakeResponse(plan_payload)
+        if req.full_url.endswith("/users/me/plan/usage-limits"):
+            return FakeResponse(limits_payload)
+        if req.full_url.endswith("/users/me"):
+            return FakeResponse(me_payload)
+        raise AssertionError(f"unexpected url: {req.full_url}")
+
+    snapshots = clinepass.collect_clinepass_api_snapshots(opener=opener, now=1_782_907_200)
+
+    by_bucket = {s.bucket: s for s in snapshots}
+    assert set(by_bucket) == {"5h", "weekly", "monthly"}
+    assert by_bucket["5h"].used_percent == 33.0
+    assert by_bucket["5h"].bucket_label == "5-hour"
+    assert by_bucket["5h"].plan == "Cline Pass Pro"
+    assert by_bucket["5h"].resets_at == int(
+        datetime.fromisoformat("2026-07-21T20:00:00+00:00").timestamp()
+    )
+    assert by_bucket["weekly"].used_percent == 12.0
+    assert by_bucket["monthly"].used_percent == 5.0
+    assert all(s.provider == "clinepass" for s in snapshots)
+    assert all(s.source == "clinepass_api" for s in snapshots)
+    assert seen_urls == [
+        "https://api.cline.bot/api/v1/users/me/plan",
+        "https://api.cline.bot/api/v1/users/me/plan/usage-limits",
+        "https://api.cline.bot/api/v1/users/me",
+    ]
+
+
+def test_clinepass_api_unavailable_when_key_unset(monkeypatch):
+    monkeypatch.delenv("CLINE_API_KEY", raising=False)
+
+    snapshots = clinepass.collect_clinepass_api_snapshots(now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    assert snapshots[0].provider == "clinepass"
+    assert snapshots[0].source == "clinepass_api"
+    assert snapshots[0].status == "unavailable"
+    assert snapshots[0].bucket == "api"
+    assert snapshots[0].raw.get("error") == "CLINE_API_KEY unset"
+
+
+def test_clinepass_api_stale_token_on_401(monkeypatch):
+    monkeypatch.setenv("CLINE_API_KEY", "test-cline-key")
+
+    def opener(_req, timeout=15):
+        raise HTTPError("https://api.cline.bot/api/v1/users/me/plan", 401, "Unauthorized", {}, None)
+
+    snapshots = clinepass.collect_clinepass_api_snapshots(opener=opener, now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    assert snapshots[0].status == "stale_token"
+    assert snapshots[0].provider == "clinepass"
+    assert snapshots[0].source == "clinepass_api"
+
+
+def test_zai_api_parses_limits_shape(monkeypatch):
+    monkeypatch.setenv("ZAI_API_KEY", "test-zai-key")
+    zai_payload = {
+        "data": {
+            "limits": [
+                {"type": "TOKENS_LIMIT", "unit": 3, "number": 5, "percentage": 42, "nextResetTime": 1_787_160_000_000},
+                {"type": "TOKENS_LIMIT", "unit": 6, "number": 1, "percentage": 7, "nextResetTime": 1_789_920_000_000},
+                {"type": "TIME_LIMIT", "percentage": 1, "nextResetTime": 1_792_680_000_000},
+            ]
+        }
+    }
+    seen_auth = []
+
+    def opener(req, timeout=15):
+        seen_auth.append(_header(req, "Authorization"))
+        return FakeResponse(zai_payload)
+
+    snapshots = zai.collect_zai_api_snapshots(opener=opener, now=1_782_907_200)
+
+    by_bucket = {s.bucket: s for s in snapshots}
+    assert set(by_bucket) == {"5h_tokens", "weekly_tokens", "mcp_monthly"}
+    assert by_bucket["5h_tokens"].used_percent == 42.0
+    assert by_bucket["5h_tokens"].bucket_label == "5h tokens"
+    assert by_bucket["5h_tokens"].plan == "Coding Plan"
+    # Epoch milliseconds (e.g. 1_787_160_000_000) must be converted to seconds by _parse_time.
+    assert by_bucket["5h_tokens"].resets_at == 1_787_160_000
+    assert by_bucket["weekly_tokens"].used_percent == 7.0
+    assert by_bucket["mcp_monthly"].used_percent == 1.0
+    assert all(s.provider == "zai" for s in snapshots)
+    assert all(s.source == "zai_api" for s in snapshots)
+    # Raw key with no "Bearer" prefix per Z.ai's auth scheme.
+    assert seen_auth == ["test-zai-key"]
+
+
+def test_zai_api_unavailable_when_key_unset(monkeypatch):
+    monkeypatch.delenv("ZAI_API_KEY", raising=False)
+
+    snapshots = zai.collect_zai_api_snapshots(now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    assert snapshots[0].provider == "zai"
+    assert snapshots[0].source == "zai_api"
+    assert snapshots[0].status == "unavailable"
+    assert snapshots[0].bucket == "api"
+    assert snapshots[0].raw.get("error") == "ZAI_API_KEY unset"
+    assert snapshots[0].plan == "Coding Plan"
+
+
+def test_zai_api_stale_token_on_401(monkeypatch):
+    monkeypatch.setenv("ZAI_API_KEY", "test-zai-key")
+
+    def opener(_req, timeout=15):
+        raise HTTPError("https://api.z.ai/api/monitor/usage/quota/limit", 401, "Unauthorized", {}, None)
+
+    snapshots = zai.collect_zai_api_snapshots(opener=opener, now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    assert snapshots[0].status == "stale_token"
+    assert snapshots[0].provider == "zai"
+    assert snapshots[0].source == "zai_api"

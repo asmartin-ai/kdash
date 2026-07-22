@@ -1710,7 +1710,10 @@
               <div id="quotaVisibilityPanel" class="quota-visibility-panel hidden" role="menu" aria-label="Show providers">
                 <label class="quota-visibility-item"><input type="checkbox" data-quota-provider="codex" checked><span>Codex</span></label>
                 <label class="quota-visibility-item"><input type="checkbox" data-quota-provider="claude" checked><span>Claude Code</span></label>
-                <label class="quota-visibility-item"><input type="checkbox" data-quota-provider="antigravity" checked><span>Antigravity</span></label>
+                <!-- Antigravity provider DISABLED 2026-07-22 (no active subscription). Re-enable by uncommenting this label. -->
+                <!-- <label class="quota-visibility-item"><input type="checkbox" data-quota-provider="antigravity" checked><span>Antigravity</span></label> -->
+                <label class="quota-visibility-item"><input type="checkbox" data-quota-provider="clinepass" checked><span>ClinePass</span></label>
+                <label class="quota-visibility-item"><input type="checkbox" data-quota-provider="zai" checked><span>Z.ai GLM</span></label>
               </div>
             </div>
             <!-- TASK 2: no dedicated quota refresh button anymore — the global #refreshBtn
@@ -4609,14 +4612,18 @@
     function quotaProviderLabel(provider) {
       if (provider === 'codex') return 'Codex';
       if (provider === 'claude') return 'Claude Code';
-      if (provider === 'antigravity') return 'Antigravity';
+      if (provider === 'clinepass') return 'ClinePass';
+      if (provider === 'zai') return 'Z.ai GLM';
+      // if (provider === 'antigravity') return 'Antigravity';  // DISABLED 2026-07-22 — re-enable to restore
       return provider || '—';
     }
 
     function quotaConsentMeta(provider) {
       if (provider === 'codex') return { key: 'codex_api', endpoint: 'chatgpt.com/backend-api/wham/*', path: '$CODEX_HOME/auth.json' };
       if (provider === 'claude') return { key: 'claude_api', endpoint: 'api.anthropic.com/api/oauth/usage', path: '$CLAUDE_CONFIG_DIR/.credentials.json' };
-      if (provider === 'antigravity') return { key: 'antigravity_api', endpoint: 'daily-cloudcode-pa.googleapis.com/v1internal:*', path: '~/.gemini/antigravity-cli/antigravity-oauth-token' };
+      if (provider === 'clinepass') return { key: 'clinepass_api', endpoint: 'api.cline.bot/api/v1/users/me/plan/usage-limits', path: 'env: $CLINE_API_KEY' };
+      if (provider === 'zai') return { key: 'zai_api', endpoint: 'api.z.ai/api/monitor/usage/quota/limit', path: 'env: $ZAI_API_KEY' };
+      // if (provider === 'antigravity') return { key: 'antigravity_api', endpoint: 'daily-cloudcode-pa.googleapis.com/v1internal:*', path: '~/.gemini/antigravity-cli/antigravity-oauth-token' };
       return { key: '', endpoint: '', path: '' };
     }
 
@@ -4719,10 +4726,10 @@
         if (key === 'weekly_all') return `Claude ${t('windowWeekly')}`;
         return `Claude ${item.bucket_label || key}`; // Fable etc.
       }
-      if (provider === 'antigravity') {
-        // Pooled series already carry the group name ("Gemini Models" / "Claude and GPT Models").
-        return item.bucket_label || 'Antigravity';
-      }
+      // if (provider === 'antigravity') {  // DISABLED 2026-07-22 — fallback below handles ClinePass/Z.ai
+      //   // Pooled series already carry the group name ("Gemini Models" / "Claude and GPT Models").
+      //   return item.bucket_label || 'Antigravity';
+      // }
       return `${quotaProviderLabel(provider)} ${item.bucket_label || key}`;
     }
 
@@ -4922,7 +4929,7 @@
         return;
       }
       const providers = payload?.providers || {};
-      const order = ['codex', 'claude', 'antigravity'];
+      const order = ['codex', 'claude', 'clinepass', 'zai'];
       const cards = document.createDocumentFragment();
       let renderedCards = 0;
 
@@ -4943,8 +4950,10 @@
         title.textContent = quotaProviderLabel(providerKey);
         // Plan label (Pro Lite / Max 5x …) sits INLINE after the provider name as a muted
         // suffix instead of on its own line, so the card reads "Codex · Pro Lite" and the
-        // window bars start higher. Antigravity has no plan line.
-        const plan = provider.plan || provider.tier || (providerKey === 'antigravity' ? '' : t('notDetected'));
+        // window bars start higher. Antigravity / ClinePass / Z.ai have no plan line — the
+        // plan is conveyed in the section subtitle instead (or for ClinePass/Z.ai the plan
+        // is constant, e.g. "Coding Plan", so the inline suffix would be noise).
+        const plan = provider.plan || provider.tier || (providerKey === 'antigravity' || providerKey === 'clinepass' || providerKey === 'zai' ? '' : t('notDetected'));
         if (plan) {
           const planSuffix = document.createElement('span');
           planSuffix.className = 'text-xs font-semibold ml-2';
@@ -4976,10 +4985,13 @@
         header.appendChild(titleWrap);
         card.appendChild(header);
 
-        const antigravityPoolsRendered = providerKey === 'antigravity' && buckets.length
-          ? renderAntigravityPools(card, provider)
-          : 0;
-        if (!buckets.length || (providerKey === 'antigravity' && !antigravityPoolsRendered)) {
+        // Antigravity pool-rendering DISABLED 2026-07-22 (provider not active). The generic
+        // bucket render path below handles ClinePass / Z.ai without any per-provider branch.
+        // const antigravityPoolsRendered = providerKey === 'antigravity' && buckets.length
+        //   ? renderAntigravityPools(card, provider)
+        //   : 0;
+        // if (!buckets.length || (providerKey === 'antigravity' && !antigravityPoolsRendered)) {
+        if (!buckets.length) {
           if (provider.status_detail && provider.status_detail !== 'ok') {
             appendQuotaStatusNotice(card, providerKey, provider);
           } else {
@@ -4989,8 +5001,8 @@
             empty.textContent = t('quotaNoData');
             card.appendChild(empty);
           }
-        } else if (providerKey === 'antigravity') {
-          appendQuotaStatusNotice(card, providerKey, provider);
+        // } else if (providerKey === 'antigravity') {  // DISABLED 2026-07-22
+        //   appendQuotaStatusNotice(card, providerKey, provider);
         } else if (providerKey === 'codex') {
           renderCodexBuckets(card, buckets);
           appendQuotaStatusNotice(card, providerKey, provider);
@@ -5100,15 +5112,16 @@
     }
 
     // Provider-visibility dropdown state. The user can hide whole providers (Codex /
-    // Claude / Antigravity) from both the cards and the charts; the choice is persisted
+    // Claude / ClinePass / Z.ai) from both the cards and the charts; the choice is persisted
     // in localStorage and defaults to all-visible. Unknown providers default to visible.
-    const QUOTA_PROVIDERS = ['codex', 'claude', 'antigravity'];
+    // "antigravity" removed 2026-07-22 (provider disabled); re-enable by adding it back.
+    const QUOTA_PROVIDERS = ['codex', 'claude', 'clinepass', 'zai'];
     const QUOTA_VISIBILITY_KEY = 'tokdash-quota-visible';
     let quotaVisibilityState = null;
 
     function loadQuotaVisibility() {
       if (quotaVisibilityState) return quotaVisibilityState;
-      const state = { codex: true, claude: true, antigravity: true };
+      const state = { codex: true, claude: true, clinepass: true, zai: true };
       try {
         const raw = localStorage.getItem(QUOTA_VISIBILITY_KEY);
         if (raw) {
@@ -5181,7 +5194,11 @@
     function renderQuotaCharts(history) {
       // Provider-visibility filter (dropdown next to the interval selector): drop whole
       // provider series the user has hidden before any dataset is built.
-      const series = collapseAntigravitySeriesForCharts(history?.series || [])
+      // collapseAntigravitySeriesForCharts disabled 2026-07-22 — series pass through unchanged
+      // so ClinePass / Z.ai / future providers' series render in the chart. To re-enable
+      // antigravity pool-collapsing, uncomment the call below.
+      // const series = collapseAntigravitySeriesForCharts(history?.series || [])
+      const series = (history?.series || [])
         .filter((item) => quotaProviderVisible(item.provider));
       const granularity = history?.granularity || 'hour';
       const palette = getChartPalette();

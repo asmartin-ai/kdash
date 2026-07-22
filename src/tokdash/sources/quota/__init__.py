@@ -11,13 +11,17 @@ from ...usage_store import (
     persistent_usage_db_enabled,
 )
 from . import config
-from .antigravity import collect_antigravity_api_snapshots
+# antigravity import DISABLED 2026-07-22 (no active subscription). Re-enable by
+# uncommenting the next line AND the antigravity_api branch in collect_network_snapshots.
+# from .antigravity import collect_antigravity_api_snapshots
 from .claude import read_claude_plan
 from .claude import collect_claude_api_snapshots
+from .clinepass import collect_clinepass_api_snapshots
 from .codex import collect_codex_session_snapshots
 from .codex import collect_codex_session_snapshots_incremental
 from .codex import collect_codex_api_snapshots
 from .types import QuotaSnapshot
+from .zai import collect_zai_api_snapshots
 
 _CURRENT_SNAPSHOTS: list[QuotaSnapshot] = []
 _LAST_POLL_AT: int | None = None
@@ -53,8 +57,13 @@ def collect_network_snapshots(sources: Iterable[str] | None = None) -> list[Quot
             snapshots.extend(collect_codex_api_snapshots())
         elif key == "claude_api":
             snapshots.extend(collect_claude_api_snapshots())
-        elif key == "antigravity_api":
-            snapshots.extend(collect_antigravity_api_snapshots())
+        elif key == "clinepass_api":
+            snapshots.extend(collect_clinepass_api_snapshots())
+        elif key == "zai_api":
+            snapshots.extend(collect_zai_api_snapshots())
+        # antigravity_api branch DISABLED 2026-07-22. Re-enable by uncommenting:
+        # elif key == "antigravity_api":
+        #     snapshots.extend(collect_antigravity_api_snapshots())
     return snapshots
 
 
@@ -306,7 +315,9 @@ def _network_key_for_provider(name: str) -> str:
     return {
         "codex": "codex_api",
         "claude": "claude_api",
-        "antigravity": "antigravity_api",
+        "clinepass": "clinepass_api",
+        "zai": "zai_api",
+        # "antigravity": "antigravity_api",  # DISABLED 2026-07-22 — re-enable to restore
     }.get(name, f"{name}_api")
 
 
@@ -349,7 +360,8 @@ def quota_state(store: UsageEntryStore | None = None) -> dict[str, Any]:
         latest = [s.as_dict() for s in _CURRENT_SNAPSHOTS]
 
     consent = quota_network_consent()
-    providers = {name: _provider_shell(name, consent) for name in ("codex", "claude", "antigravity")}
+    # "antigravity" removed from the default shell list 2026-07-22 (no active sub).
+    providers = {name: _provider_shell(name, consent) for name in ("codex", "claude", "clinepass", "zai")}
     last_network_run: int | None = _LAST_POLL_AT
     # When Codex API polling is enabled, the API is the sole oracle for the current-quota
     # cards: codex_session rows are excluded from bucket selection below so a newer cached

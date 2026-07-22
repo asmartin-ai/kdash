@@ -8,7 +8,10 @@ from typing import Any
 
 from ...onboard import paths
 
-QUOTA_KEYS = ("codex_api", "claude_api", "antigravity_api")
+# antigravity_api REMOVED 2026-07-22 (user has no active subscription).
+# Re-enable by adding back "antigravity_api" — the antigravity.py collector
+# is still in tree and the frontend consent-meta entry is preserved (commented out).
+QUOTA_KEYS = ("codex_api", "claude_api", "clinepass_api", "zai_api")
 
 # Poll-interval choices offered in the UI / setup wizard and the effective default
 # (Rev 3: 30 min balances snapshot freshness against provider-call volume).
