@@ -8,36 +8,36 @@ from tokdash.sources.quota import config
 
 
 def test_quota_network_consent_defaults_off_and_round_trips(tmp_path):
-    assert config.read_quota_config() == {"codex_api": False, "claude_api": False, "clinepass_api": False, "zai_api": False, "zenmux_api": False}
+    assert config.read_quota_config() == {"omp_api": False, "clinepass_api": False, "zenmux_api": False}
 
-    updated = config.set_quota_consent({"codex_api": True, "claude_api": True})
+    updated = config.set_quota_consent({"omp_api": True, "clinepass_api": True})
 
-    assert updated == {"codex_api": True, "claude_api": True, "clinepass_api": False, "zai_api": False, "zenmux_api": False}
+    assert updated == {"omp_api": True, "clinepass_api": True, "zenmux_api": False}
     assert config.read_quota_config() == updated
 
 
 def test_quota_kill_switch_disables_network_even_with_saved_consent(monkeypatch):
-    config.set_quota_consent({"codex_api": True, "claude_api": True, "clinepass_api": True, "zai_api": True, "zenmux_api": True})
+    config.set_quota_consent({"omp_api": True, "clinepass_api": True, "zenmux_api": True})
 
     monkeypatch.setenv("TOKDASH_QUOTA_POLL", "0")
 
     assert config.enabled_network_sources() == []
-    assert config.network_enabled("codex_api") is False
+    assert config.network_enabled("omp_api") is False
 
 
 def test_quota_config_preserves_unrelated_config_keys():
-    config.set_quota_consent({"codex_api": True})
+    config.set_quota_consent({"omp_api": True})
 
     path = config.config_path()
     data = json.loads(path.read_text(encoding="utf-8"))
     data["update_check"] = True
     path.write_text(json.dumps(data), encoding="utf-8")
 
-    config.set_quota_consent({"codex_api": False, "clinepass_api": True})
+    config.set_quota_consent({"omp_api": False, "clinepass_api": True})
 
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert saved["update_check"] is True
-    assert saved["quota"] == {"codex_api": False, "claude_api": False, "clinepass_api": True, "zai_api": False, "zenmux_api": False}
+    assert saved["quota"] == {"omp_api": False, "clinepass_api": True, "zenmux_api": False}
 
 
 def test_poll_interval_precedence_env_over_config_over_default(monkeypatch):
@@ -78,12 +78,12 @@ def test_master_switch_defaults_on_and_round_trips():
 
 
 def test_master_switch_disables_network_sources():
-    config.set_quota_consent({"codex_api": True, "claude_api": True})
-    assert config.enabled_network_sources() == ["codex_api", "claude_api"]
+    config.set_quota_consent({"omp_api": True, "clinepass_api": True})
+    assert config.enabled_network_sources() == ["omp_api", "clinepass_api"]
 
     config.set_quota_enabled(False)
     assert config.enabled_network_sources() == []
-    assert config.network_enabled("codex_api") is False
+    assert config.network_enabled("omp_api") is False
 
 
 def test_kill_switch_overrides_config_enabled(monkeypatch):
@@ -95,12 +95,12 @@ def test_kill_switch_overrides_config_enabled(monkeypatch):
 
 
 def test_settings_preserve_consent_and_unrelated_keys():
-    config.set_quota_consent({"codex_api": True})
+    config.set_quota_consent({"omp_api": True})
     config.set_poll_interval_minutes(120)
     config.set_quota_enabled(False)
 
     saved = config.read_quota_config()
-    assert saved["codex_api"] is True
+    assert saved["omp_api"] is True
     assert config.read_poll_interval_minutes() == 120
     assert config.quota_config_enabled() is False
 
@@ -152,8 +152,8 @@ def test_set_quota_consent_preserves_enabled_and_interval():
     config.set_quota_enabled(False)
     config.set_poll_interval_minutes(60)
 
-    config.set_quota_consent({"codex_api": True})
+    config.set_quota_consent({"omp_api": True})
 
     assert config.quota_config_enabled() is False
     assert config.read_poll_interval_minutes() == 60
-    assert config.read_quota_config()["codex_api"] is True
+    assert config.read_quota_config()["omp_api"] is True

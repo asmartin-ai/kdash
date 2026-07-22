@@ -4621,10 +4621,10 @@
     }
 
     function quotaConsentMeta(provider) {
-      if (provider === 'codex') return { key: 'codex_api', endpoint: 'chatgpt.com/backend-api/wham/*', path: '$CODEX_HOME/auth.json' };
-      if (provider === 'claude') return { key: 'claude_api', endpoint: 'api.anthropic.com/api/oauth/usage', path: '$CLAUDE_CONFIG_DIR/.credentials.json' };
+      if (provider === 'codex') return { key: 'omp_api', endpoint: 'omp usage --json', path: 'built-in (oh-my-pi)' };
+      if (provider === 'claude') return { key: 'omp_api', endpoint: 'omp usage --json', path: 'built-in (oh-my-pi)' };
       if (provider === 'clinepass') return { key: 'clinepass_api', endpoint: 'api.cline.bot/api/v1/users/me/plan/usage-limits', path: 'env: $CLINE_API_KEY' };
-      if (provider === 'zai') return { key: 'zai_api', endpoint: 'api.z.ai/api/monitor/usage/quota/limit', path: 'env: $ZAI_API_KEY' };
+      if (provider === 'zai') return { key: 'omp_api', endpoint: 'omp usage --json', path: 'built-in (oh-my-pi)' };
       if (provider === 'zenmux') return { key: 'zenmux_api', endpoint: 'zenmux.ai/api/v1/management/subscription/detail', path: '$ZENMUX_MANAGEMENT_API_KEY' };
       // if (provider === 'antigravity') return { key: 'antigravity_api', endpoint: 'daily-cloudcode-pa.googleapis.com/v1internal:*', path: '~/.gemini/antigravity-cli/antigravity-oauth-token' };
       return { key: '', endpoint: '', path: '' };

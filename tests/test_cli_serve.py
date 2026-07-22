@@ -56,7 +56,7 @@ def test_quota_consent_cli_updates_config():
 
     from tokdash.sources.quota.config import read_quota_config
 
-    assert read_quota_config() == {"codex_api": True, "claude_api": False, "clinepass_api": False, "zai_api": False, "zenmux_api": False}
+    assert read_quota_config() == {"omp_api": True, "clinepass_api": False, "zenmux_api": False}
 
 
 def test_quota_poll_cli_uses_collector(monkeypatch):

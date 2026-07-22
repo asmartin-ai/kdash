@@ -37,7 +37,7 @@ def test_get_quota_returns_stored_codex_session_data_without_collecting(monkeypa
     assert payload["providers"]["codex"]["network_enabled"] is False
     assert payload["providers"]["codex"]["buckets"][0]["bucket"] == "5h"
     assert payload["providers"]["codex"]["buckets"][0]["used_percent"] == 50.0
-    assert payload["consent"] == {"codex_api": False, "claude_api": False, "clinepass_api": False, "zai_api": False, "zenmux_api": False}
+    assert payload["consent"] == {"omp_api": False, "clinepass_api": False, "zenmux_api": False}
 
 
 def test_get_quota_does_not_call_network_collectors(monkeypatch):
@@ -69,10 +69,10 @@ def test_quota_history_route_uses_stored_snapshots(tmp_path):
 
 def test_quota_consent_route_persists_provider_flags():
     api._clear_cache()
-    payload = api.set_quota_consent({"codex_api": True, "claude_api": False})
+    payload = api.set_quota_consent({"omp_api": True, "clinepass_api": False})
 
-    assert payload["consent"] == {"codex_api": True, "claude_api": False, "clinepass_api": False, "zai_api": False, "zenmux_api": False}
-    assert api.get_quota()["consent"]["codex_api"] is True
+    assert payload["consent"] == {"omp_api": True, "clinepass_api": False, "zenmux_api": False}
+    assert api.get_quota()["consent"]["omp_api"] is True
 
 
 def test_quota_refresh_collects_and_stores_network_snapshots(monkeypatch):
@@ -87,7 +87,7 @@ def test_quota_refresh_collects_and_stores_network_snapshots(monkeypatch):
         None,
         "max",
         1_782_907_200,
-        "claude_api",
+        "omp_api",
         "ok",
         {"fixture": True},
     )
@@ -217,7 +217,7 @@ def test_get_quota_marks_network_enabled_and_last_run_for_api_rows():
     from tokdash.usage_store import UsageEntryStore
 
     api._clear_cache()
-    api.set_quota_consent({"codex_api": True})
+    api.set_quota_consent({"omp_api": True})
     UsageEntryStore().insert_quota_snapshots(
         [
             QuotaSnapshot(
@@ -515,7 +515,7 @@ def test_get_quota_api_enabled_session_does_not_override_bucket():
     from tokdash.usage_store import UsageEntryStore
 
     api._clear_cache()
-    api.set_quota_consent({"codex_api": True})
+    api.set_quota_consent({"omp_api": True})
     UsageEntryStore().insert_quota_snapshots(
         [
             QuotaSnapshot(
@@ -546,7 +546,7 @@ def test_get_quota_api_enabled_session_only_omits_bucket():
     from tokdash.usage_store import UsageEntryStore
 
     api._clear_cache()
-    api.set_quota_consent({"codex_api": True})
+    api.set_quota_consent({"omp_api": True})
     UsageEntryStore().insert_quota_snapshots(
         [
             QuotaSnapshot(
@@ -570,7 +570,7 @@ def test_get_quota_api_disabled_shows_session_and_marks_estimated():
     from tokdash.usage_store import UsageEntryStore
 
     api._clear_cache()
-    api.set_quota_consent({"codex_api": False})
+    api.set_quota_consent({"omp_api": False})
     UsageEntryStore().insert_quota_snapshots(
         [
             QuotaSnapshot(

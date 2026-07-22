@@ -813,8 +813,7 @@ def quota_command(args) -> int:
         updates = {
             key: value
             for key, value in {
-                "codex_api": _parse_onoff(args.codex_api),
-                "claude_api": _parse_onoff(args.claude_api),
+                "omp_api": _parse_onoff(args.codex_api) if _parse_onoff(args.codex_api) is not None else _parse_onoff(args.claude_api),
                 "antigravity_api": _parse_onoff(args.antigravity_api),
             }.items()
             if value is not None

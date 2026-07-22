@@ -226,13 +226,13 @@ def test_overdue_anchor_remains_scheduled_until_provider_is_covered():
 
 def test_boundary_network_collection_calls_only_triggering_provider(monkeypatch):
     calls = []
-    monkeypatch.setattr(config, "enabled_network_sources", lambda: ["codex_api", "claude_api"])
-    monkeypatch.setattr(quota, "collect_codex_api_snapshots", lambda: calls.append("codex") or [])
-    monkeypatch.setattr(quota, "collect_claude_api_snapshots", lambda: calls.append("claude") or [])
+    monkeypatch.setattr(config, "enabled_network_sources", lambda: ["omp_api", "clinepass_api"])
+    monkeypatch.setattr(quota, "collect_omp_api_snapshots", lambda: calls.append("omp") or [])
+    monkeypatch.setattr(quota, "collect_clinepass_api_snapshots", lambda: calls.append("clinepass") or [])
 
-    quota.collect_network_snapshots(["claude_api"])
+    quota.collect_network_snapshots(["omp_api"])
 
-    assert calls == ["claude"]
+    assert calls == ["omp"]
 
 
 def test_record_boundary_poll_metric_increments_quota_meta():

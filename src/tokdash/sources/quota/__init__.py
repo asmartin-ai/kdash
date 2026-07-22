@@ -14,14 +14,12 @@ from . import config
 # antigravity import DISABLED 2026-07-22 (no active subscription). Re-enable by
 # uncommenting the next line AND the antigravity_api branch in collect_network_snapshots.
 # from .antigravity import collect_antigravity_api_snapshots
-from .claude import read_claude_plan
-from .claude import collect_claude_api_snapshots
+from .omp import read_claude_plan
+from .omp import collect_omp_api_snapshots
 from .clinepass import collect_clinepass_api_snapshots
 from .codex import collect_codex_session_snapshots
 from .codex import collect_codex_session_snapshots_incremental
-from .codex import collect_codex_api_snapshots
 from .types import QuotaSnapshot
-from .zai import collect_zai_api_snapshots
 from .zenmux import collect_zenmux_api_snapshots
 
 _CURRENT_SNAPSHOTS: list[QuotaSnapshot] = []
@@ -54,16 +52,13 @@ def collect_network_snapshots(sources: Iterable[str] | None = None) -> list[Quot
         enabled = [source for source in enabled if source in requested]
     snapshots: list[QuotaSnapshot] = []
     for key in enabled:
-        if key == "codex_api":
-            snapshots.extend(collect_codex_api_snapshots())
-        elif key == "claude_api":
-            snapshots.extend(collect_claude_api_snapshots())
+        if key == "omp_api":
+            snapshots.extend(collect_omp_api_snapshots())
         elif key == "clinepass_api":
             snapshots.extend(collect_clinepass_api_snapshots())
-        elif key == "zai_api":
-            snapshots.extend(collect_zai_api_snapshots())
         elif key == "zenmux_api":
             snapshots.extend(collect_zenmux_api_snapshots())
+        # antigravity_api disabled 2026-07-22 (commented out below)
         # antigravity_api branch DISABLED 2026-07-22. Re-enable by uncommenting:
         # elif key == "antigravity_api":
         #     snapshots.extend(collect_antigravity_api_snapshots())
@@ -316,10 +311,10 @@ def _codex_plan_label(plan: Any) -> str | None:
 
 def _network_key_for_provider(name: str) -> str:
     return {
-        "codex": "codex_api",
-        "claude": "claude_api",
+        "claude": "omp_api",
+        "codex": "omp_api",
+        "zai": "omp_api",
         "clinepass": "clinepass_api",
-        "zai": "zai_api",
         "zenmux": "zenmux_api",
         # "antigravity": "antigravity_api",  # DISABLED 2026-07-22 — re-enable to restore
     }.get(name, f"{name}_api")
@@ -367,12 +362,12 @@ def quota_state(store: UsageEntryStore | None = None) -> dict[str, Any]:
     # "antigravity" removed from the default shell list 2026-07-22 (no active sub).
     providers = {name: _provider_shell(name, consent) for name in ("codex", "claude", "clinepass", "zai", "zenmux")}
     last_network_run: int | None = _LAST_POLL_AT
-    # When Codex API polling is enabled, the API is the sole oracle for the current-quota
+    # When omp_api polling is enabled, the API is the sole oracle for the current-quota
     # cards: codex_session rows are excluded from bucket selection below so a newer cached
-    # session row can never override a fresher API observation. Prefer
+    # session row can never override a fresher omp observation. Prefer
     # `config.network_enabled` (not raw `consent`) so the `TOKDASH_QUOTA_POLL` kill switch
     # is honored consistently with `quota_history`'s `network_only_providers` gate.
-    network_only = {"codex"} if config.network_enabled("codex_api") else set()
+    network_only = {"codex"} if config.network_enabled("omp_api") else set()
     for row in latest:
         provider = str(row.get("provider") or "")
         if provider not in providers:
@@ -434,7 +429,7 @@ def quota_state(store: UsageEntryStore | None = None) -> dict[str, Any]:
             int(row.get("captured_at") or 0)
             for row in bucket_rows
             if str(row.get("provider")) == "codex"
-            and str(row.get("source")) == "codex_api"
+            and str(row.get("source")) in {"codex_api", "omp_api"}
             and row.get("bucket") not in {"api", "reset_credits"}
         ]
         if codex_api_usage_times:
@@ -444,7 +439,7 @@ def quota_state(store: UsageEntryStore | None = None) -> dict[str, Any]:
                 for row in bucket_rows
                 if not (
                     str(row.get("provider")) == "codex"
-                    and str(row.get("source")) == "codex_api"
+                    and str(row.get("source")) in {"codex_api", "omp_api"}
                     and row.get("bucket") not in {"api", "reset_credits"}
                     and int(row.get("captured_at") or 0) != current_codex_api_at
                 )
