@@ -1715,6 +1715,7 @@
                 <label class="quota-visibility-item"><input type="checkbox" data-quota-provider="clinepass" checked><span>ClinePass</span></label>
                 <label class="quota-visibility-item"><input type="checkbox" data-quota-provider="zai" checked><span>Z.ai GLM</span></label>
                 <label class="quota-visibility-item"><input type="checkbox" data-quota-provider="zenmux" checked><span>ZenMux</span></label>
+                <label class="quota-visibility-item"><input type="checkbox" data-quota-provider="qwencloud" checked><span>Qwen Cloud</span></label>
               </div>
             </div>
             <!-- TASK 2: no dedicated quota refresh button anymore — the global #refreshBtn
@@ -4616,8 +4617,8 @@
       if (provider === 'clinepass') return 'ClinePass';
       if (provider === 'zai') return 'Z.ai GLM';
       if (provider === 'zenmux') return 'ZenMux';
+      if (provider === 'qwencloud') return 'Qwen Cloud';
       // if (provider === 'antigravity') return 'Antigravity';  // DISABLED 2026-07-22 — re-enable to restore
-      return provider || '—';
     }
 
     function quotaConsentMeta(provider) {
@@ -4625,9 +4626,8 @@
       if (provider === 'claude') return { key: 'omp_api', endpoint: 'omp usage --json', path: 'built-in (oh-my-pi)' };
       if (provider === 'clinepass') return { key: 'clinepass_api', endpoint: 'api.cline.bot/api/v1/users/me/plan/usage-limits', path: 'env: $CLINE_API_KEY' };
       if (provider === 'zai') return { key: 'omp_api', endpoint: 'omp usage --json', path: 'built-in (oh-my-pi)' };
-      if (provider === 'zenmux') return { key: 'zenmux_api', endpoint: 'zenmux.ai/api/v1/management/subscription/detail', path: '$ZENMUX_MANAGEMENT_API_KEY' };
+      if (provider === 'qwencloud') return { key: 'qwencloud_api', endpoint: 'token-plan.ap-southeast-1.maas.aliyuncs.com/compatible-mode/v1/models', path: '$QWEN_CLOUD_API_KEY' };
       // if (provider === 'antigravity') return { key: 'antigravity_api', endpoint: 'daily-cloudcode-pa.googleapis.com/v1internal:*', path: '~/.gemini/antigravity-cli/antigravity-oauth-token' };
-      return { key: '', endpoint: '', path: '' };
     }
 
     // TASK 2 (simplification round): the dedicated #quotaRefresh control is gone — the

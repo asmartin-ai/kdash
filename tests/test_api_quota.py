@@ -37,7 +37,7 @@ def test_get_quota_returns_stored_codex_session_data_without_collecting(monkeypa
     assert payload["providers"]["codex"]["network_enabled"] is False
     assert payload["providers"]["codex"]["buckets"][0]["bucket"] == "5h"
     assert payload["providers"]["codex"]["buckets"][0]["used_percent"] == 50.0
-    assert payload["consent"] == {"omp_api": False, "clinepass_api": False, "zenmux_api": False}
+    assert payload["consent"] == {"omp_api": False, "clinepass_api": False, "zenmux_api": False, "moonshot_api": False, "agnes_api": False, "iamhc_api": False, "fireworks_api": False, "openrouter_api": False, "deepseek_api": False, "qwencloud_api": False}
 
 
 def test_get_quota_does_not_call_network_collectors(monkeypatch):
@@ -71,7 +71,7 @@ def test_quota_consent_route_persists_provider_flags():
     api._clear_cache()
     payload = api.set_quota_consent({"omp_api": True, "clinepass_api": False})
 
-    assert payload["consent"] == {"omp_api": True, "clinepass_api": False, "zenmux_api": False}
+    assert payload["consent"] == {"omp_api": True, "clinepass_api": False, "zenmux_api": False, "moonshot_api": False, "agnes_api": False, "iamhc_api": False, "fireworks_api": False, "openrouter_api": False, "deepseek_api": False, "qwencloud_api": False}
     assert api.get_quota()["consent"]["omp_api"] is True
 
 

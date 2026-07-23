@@ -8,11 +8,11 @@ from tokdash.sources.quota import config
 
 
 def test_quota_network_consent_defaults_off_and_round_trips(tmp_path):
-    assert config.read_quota_config() == {"omp_api": False, "clinepass_api": False, "zenmux_api": False}
+    assert config.read_quota_config() == {"omp_api": False, "clinepass_api": False, "zenmux_api": False, "moonshot_api": False, "agnes_api": False, "iamhc_api": False, "fireworks_api": False, "openrouter_api": False, "deepseek_api": False, "qwencloud_api": False}
 
     updated = config.set_quota_consent({"omp_api": True, "clinepass_api": True})
 
-    assert updated == {"omp_api": True, "clinepass_api": True, "zenmux_api": False}
+    assert updated == {"omp_api": True, "clinepass_api": True, "zenmux_api": False, "moonshot_api": False, "agnes_api": False, "iamhc_api": False, "fireworks_api": False, "openrouter_api": False, "deepseek_api": False, "qwencloud_api": False}
     assert config.read_quota_config() == updated
 
 
@@ -37,7 +37,7 @@ def test_quota_config_preserves_unrelated_config_keys():
 
     saved = json.loads(path.read_text(encoding="utf-8"))
     assert saved["update_check"] is True
-    assert saved["quota"] == {"omp_api": False, "clinepass_api": True, "zenmux_api": False}
+    assert saved["quota"] == {"omp_api": False, "clinepass_api": True, "zenmux_api": False, "moonshot_api": False, "agnes_api": False, "iamhc_api": False, "fireworks_api": False, "openrouter_api": False, "deepseek_api": False, "qwencloud_api": False}
 
 
 def test_poll_interval_precedence_env_over_config_over_default(monkeypatch):

@@ -21,6 +21,13 @@ from .codex import collect_codex_session_snapshots
 from .codex import collect_codex_session_snapshots_incremental
 from .types import QuotaSnapshot
 from .zenmux import collect_zenmux_api_snapshots
+from .moonshot import collect_moonshot_api_snapshots
+from .agnes import collect_agnes_api_snapshots
+from .iamhc import collect_iamhc_api_snapshots
+from .fireworks import collect_fireworks_api_snapshots
+from .openrouter import collect_openrouter_api_snapshots
+from .deepseek import collect_deepseek_api_snapshots
+from .qwencloud import collect_qwencloud_api_snapshots
 
 _CURRENT_SNAPSHOTS: list[QuotaSnapshot] = []
 _LAST_POLL_AT: int | None = None
@@ -58,10 +65,20 @@ def collect_network_snapshots(sources: Iterable[str] | None = None) -> list[Quot
             snapshots.extend(collect_clinepass_api_snapshots())
         elif key == "zenmux_api":
             snapshots.extend(collect_zenmux_api_snapshots())
-        # antigravity_api disabled 2026-07-22 (commented out below)
-        # antigravity_api branch DISABLED 2026-07-22. Re-enable by uncommenting:
-        # elif key == "antigravity_api":
-        #     snapshots.extend(collect_antigravity_api_snapshots())
+        elif key == "moonshot_api":
+            snapshots.extend(collect_moonshot_api_snapshots())
+        elif key == "agnes_api":
+            snapshots.extend(collect_agnes_api_snapshots())
+        elif key == "iamhc_api":
+            snapshots.extend(collect_iamhc_api_snapshots())
+        elif key == "fireworks_api":
+            snapshots.extend(collect_fireworks_api_snapshots())
+        elif key == "openrouter_api":
+            snapshots.extend(collect_openrouter_api_snapshots())
+        elif key == "deepseek_api":
+            snapshots.extend(collect_deepseek_api_snapshots())
+        elif key == "qwencloud_api":
+            snapshots.extend(collect_qwencloud_api_snapshots())
     return snapshots
 
 
@@ -316,7 +333,13 @@ def _network_key_for_provider(name: str) -> str:
         "zai": "omp_api",
         "clinepass": "clinepass_api",
         "zenmux": "zenmux_api",
-        # "antigravity": "antigravity_api",  # DISABLED 2026-07-22 — re-enable to restore
+        "moonshot": "moonshot_api",
+        "agnes": "agnes_api",
+        "iamhc": "iamhc_api",
+        "fireworks": "fireworks_api",
+        "openrouter": "openrouter_api",
+        "deepseek": "deepseek_api",
+        "qwencloud": "qwencloud_api",
     }.get(name, f"{name}_api")
 
 
@@ -360,14 +383,14 @@ def quota_state(store: UsageEntryStore | None = None) -> dict[str, Any]:
 
     consent = quota_network_consent()
     # "antigravity" removed from the default shell list 2026-07-22 (no active sub).
-    providers = {name: _provider_shell(name, consent) for name in ("codex", "claude", "clinepass", "zai", "zenmux")}
+    providers = {name: _provider_shell(name, consent) for name in ("codex", "claude", "clinepass", "zai", "zenmux", "moonshot", "agnes", "iamhc", "fireworks", "openrouter", "deepseek", "qwencloud")}
     last_network_run: int | None = _LAST_POLL_AT
     # When omp_api polling is enabled, the API is the sole oracle for the current-quota
     # cards: codex_session rows are excluded from bucket selection below so a newer cached
     # session row can never override a fresher omp observation. Prefer
     # `config.network_enabled` (not raw `consent`) so the `TOKDASH_QUOTA_POLL` kill switch
     # is honored consistently with `quota_history`'s `network_only_providers` gate.
-    network_only = {"codex"} if config.network_enabled("omp_api") else set()
+    network_only = {"codex", "zai", "claude"} if config.network_enabled("omp_api") else set()
     for row in latest:
         provider = str(row.get("provider") or "")
         if provider not in providers:
@@ -410,40 +433,48 @@ def quota_state(store: UsageEntryStore | None = None) -> dict[str, Any]:
             ref["status"] = "ok"
 
     # Apply source authority ONLY to bucket selection (the status/reset_credits/
-    # network_enabled loop above must keep reading the full `latest`). Dropping
-    # codex_session rows here means: if codex is API-only and only session rows exist for a
-    # bucket, that bucket is simply omitted rather than falling back to stale session data.
+    # network_enabled loop above must keep reading the full `latest`). When omp_api is
+    # the network source for a provider, stale rows from that provider's legacy collector
+    # are excluded from bucket display — they have different bucket names so
+    # _freshest_usage_rows can't deduplicate them against the omp data.
+    _STALE_API_SOURCES: dict[str, set[str]] = {
+        "codex": {"codex_session"},
+        "zai": {"zai_api"},
+        "claude": {"claude_api"},
+    }
     bucket_rows = [
         r
         for r in latest
         if not (
-            "codex" in network_only
-            and str(r.get("provider")) == "codex"
-            and str(r.get("source")) == "codex_session"
+            str(r.get("provider")) in network_only
+            and str(r.get("source")) in _STALE_API_SOURCES.get(str(r.get("provider")), set())
         )
     ]
-    # The Codex endpoint can temporarily return only the weekly window. Current cards
-    # must reflect that payload exactly; older per-bucket rows remain available to history.
-    if "codex" in network_only:
-        codex_api_usage_times = [
-            int(row.get("captured_at") or 0)
-            for row in bucket_rows
-            if str(row.get("provider")) == "codex"
-            and str(row.get("source")) in {"codex_api", "omp_api"}
-            and row.get("bucket") not in {"api", "reset_credits"}
-        ]
-        if codex_api_usage_times:
-            current_codex_api_at = max(codex_api_usage_times)
-            bucket_rows = [
-                row
+    # Per-provider: keep only the most recent API poll across all API sources so a newer
+    # omp payload with different bucket ids doesn't appear alongside an older pre-omp one.
+    if any(p in network_only for p in {"codex", "zai", "claude"}):
+        for provider in ("codex", "zai", "claude"):
+            if provider not in network_only:
+                continue
+            api_usage_times = [
+                int(row.get("captured_at") or 0)
                 for row in bucket_rows
-                if not (
-                    str(row.get("provider")) == "codex"
-                    and str(row.get("source")) in {"codex_api", "omp_api"}
-                    and row.get("bucket") not in {"api", "reset_credits"}
-                    and int(row.get("captured_at") or 0) != current_codex_api_at
-                )
+                if str(row.get("provider")) == provider
+                and str(row.get("source")) in {"codex_api", "zai_api", "claude_api", "omp_api"}
+                and row.get("bucket") not in {"api", "reset_credits"}
             ]
+            if api_usage_times:
+                current_api_at = max(api_usage_times)
+                bucket_rows = [
+                    row
+                    for row in bucket_rows
+                    if not (
+                        str(row.get("provider")) == provider
+                        and str(row.get("source")) in {"codex_api", "zai_api", "claude_api", "omp_api"}
+                        and row.get("bucket") not in {"api", "reset_credits"}
+                        and int(row.get("captured_at") or 0) != current_api_at
+                    )
+                ]
 
     for row in _freshest_usage_rows(bucket_rows):
         provider = str(row.get("provider") or "")

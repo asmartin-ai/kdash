@@ -13,7 +13,7 @@ from ...onboard import paths
 # is still in tree and the frontend consent-meta entry is preserved (commented out).
 # claude_api / zai_api / codex_api consolidated into omp_api 2026-07-22.
 # omp_api runs `omp usage --json` once per poll and covers all three providers.
-QUOTA_KEYS = ("omp_api", "clinepass_api", "zenmux_api")
+QUOTA_KEYS = ("omp_api", "clinepass_api", "zenmux_api", "moonshot_api", "agnes_api", "iamhc_api", "fireworks_api", "openrouter_api", "deepseek_api", "qwencloud_api")
 
 # Poll-interval choices offered in the UI / setup wizard and the effective default
 # (Rev 3: 30 min balances snapshot freshness against provider-call volume).

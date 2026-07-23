@@ -18,6 +18,7 @@ import urllib.error
 import urllib.request
 import webbrowser
 from datetime import datetime, timedelta, timezone
+
 from pathlib import Path
 from typing import Any, Optional
 
@@ -93,6 +94,7 @@ FIREWORKS_ACCOUNT = os.environ.get(
     "FIREWORKS_ACCOUNT_ID", "accounts/asmartin-ai"
 ).strip()
 # SuperGrok trial (CLIProxyAPI) — REMOVED 2026-07-18 (trial lapsed, Grok unwired stack-wide).
+# Freebuff — REMOVED 2026-07-22 (not in active rotation; dropped from suggest.py earlier).
 # Agnes AI (Singapore free tier) — OpenAI-compatible hub; no public quota API.
 AGNES_API_BASE = os.environ.get(
     "TOKDASH_AGNES_URL", "https://apihub.agnes-ai.com/v1"
@@ -101,12 +103,6 @@ AGNES_API_BASE = os.environ.get(
 MOONSHOT_API_BASE = os.environ.get(
     "TOKDASH_MOONSHOT_URL", "https://api.moonshot.ai/v1"
 ).rstrip("/")
-FREEBUFF_FOCUS = (
-    "moonshotai/kimi-k2.7-code",
-    "deepseek/deepseek-v4-pro",
-    "minimax/minimax-m3",
-    "mimo/mimo-v2.5-pro",
-)
 
 # ANSI
 _RESET = "\x1b[0m"
@@ -339,8 +335,9 @@ def glance_tools(period: str, *, show_cost: bool = False) -> int:
     return 0
 
 
-# ── ZenMux ───────────────────────────────────────────────────────────────────
-
+# ── DEPRECATED: direct provider fetchers ──────────────────────────────────────
+# Replaced 2026-07-22 by unified quota_state() path in render().
+# Functions below are kept for test compatibility; remove in next cleanup pass.
 
 def glance_zenmux() -> int:
     key = os.environ.get("ZENMUX_MANAGEMENT_API_KEY", "").strip()
@@ -1068,65 +1065,6 @@ def glance_zai() -> int:
         kv_row(label, pct, extra)
     if not limits:
         warn_row(f"no limits ({(payload or {}).get('msg')})")
-    return 0
-
-
-# ── Freebuff ─────────────────────────────────────────────────────────────────
-
-
-def glance_freebuff() -> int:
-    key = os.environ.get("CODEBUFF_API_KEY", "").strip()
-    if not key:
-        return 0
-    try:
-        body = _http_json(
-            "https://www.codebuff.com/api/v1/freebuff/session",
-            headers={"Authorization": f"Bearer {key}"},
-        )
-    except Exception as e:
-        section("FREEBUFF")
-        err_row(str(e))
-        return 1
-
-    status = (body or {}).get("status") or "?"
-    tiers = (body or {}).get("accessTier") or "?"
-    section("FREEBUFF", f"session={status} · access={tiers}")
-
-    by_model = (body or {}).get("rateLimitsByModel") or {}
-    shown: set[str] = set()
-
-    def show(mid: str, info: dict) -> None:
-        lim = float(info.get("limit") or 0)
-        used = float(info.get("recentCount") or 0)
-        pct = (100.0 * used / lim) if lim > 0 else 0.0
-        short = mid.split("/")[-1]
-        kv_row(short, pct, f"{used:g}/{lim:g}  reset {_iso_short(info.get('resetAt'))}")
-
-    for mid in FREEBUFF_FOCUS:
-        if mid in by_model:
-            show(mid, by_model[mid])
-            shown.add(mid)
-    for mid, info in sorted(
-        by_model.items(),
-        key=lambda x: -float((x[1] or {}).get("recentCount") or 0),
-    ):
-        if mid in shown or not isinstance(info, dict):
-            continue
-        if float(info.get("recentCount") or 0) > 0:
-            show(mid, info)
-            shown.add(mid)
-    if not shown:
-        for mid, info in list(by_model.items())[:4]:
-            if isinstance(info, dict):
-                show(mid, info)
-
-    ref = (body or {}).get("referral") or {}
-    if ref:
-        info_row(
-            "referral",
-            f"weekly left {ref.get('weeklySessionsRemaining')}  "
-            f"reset {_iso_short(ref.get('resetAt'))}",
-        )
     return 0
 
 
@@ -1941,71 +1879,98 @@ def render(
 ) -> int:
     rc = 0
     order = [
-        ("zenmux", glance_zenmux),
-        ("claude", glance_claude_plan),
-        ("clinepass", glance_clinepass),
-        ("zai", glance_zai),
-        ("moonshot", glance_moonshot),
-        ("agnes", glance_agnes),
-        ("freebuff", glance_freebuff),
-        ("iamhc", glance_iamhc),
-        ("fireworks", glance_fireworks),
-        ("openrouter", glance_openrouter),
-        ("deepseek", glance_deepseek),
+        ("zenmux", "ZENMUX"),
+        ("claude", "CLAUDE"),
+        ("clinepass", "CLINEPASS"),
+        ("zai", "ZAI"),
+        ("codex", "CODEX"),
+        ("moonshot", "MOONSHOT"),
+        ("agnes", "AGNES"),
+        ("iamhc", "IAMHC"),
+        ("fireworks", "FIREWORKS"),
+        ("openrouter", "OPENROUTER"),
+        ("deepseek", "DEEPSEEK"),
+        ("qwencloud", "QWEN CLOUD"),
     ]
-    for name, fn in order:
+    try:
+        from .sources.quota import quota_state
+
+        state = quota_state()
+        providers = state.get("providers") or {}
+    except Exception as e:
+        section("QUOTA", "error")
+        err_row(f"quota_state failed: {e}")
+        rc = 1
+        providers = {}
+
+    for name, label in order:
         if not sections.get(name, True):
             continue
-        # skip silently if key-gated function would no-op without section header
-        # (each fn returns 0 early if key missing)
-        try:
-            if name == "zenmux" and not os.environ.get("ZENMUX_MANAGEMENT_API_KEY"):
-                continue
-            if name == "clinepass" and not os.environ.get("CLINE_API_KEY"):
-                continue
-            if name == "zai" and not os.environ.get("ZAI_API_KEY"):
-                continue
-            if name == "freebuff" and not os.environ.get("CODEBUFF_API_KEY"):
-                continue
-            if name == "agnes" and not os.environ.get("AGNES_API_KEY"):
-                continue
-            if name == "moonshot" and not os.environ.get("MOONSHOT_API_KEY"):
-                continue
-            if name == "iamhc" and not os.environ.get("IAMHC_API_KEY"):
-                continue
-            if name == "fireworks" and not os.environ.get("FIREWORKS_API_KEY"):
-                continue
-            if name == "openrouter" and not os.environ.get("OPENROUTER_API_KEY"):
-                continue
-            if name == "deepseek" and not os.environ.get("DEEPSEEK_API_KEY"):
-                continue
-            rc = fn() or rc
-            _emit()  # blank line between sections
-        except Exception as e:
-            section(name.upper())
-            err_row(str(e))
-            _emit()
-            rc = 1
+        pdata = providers.get(name)
+        if not pdata:
+            continue
+        status = pdata.get("status") or "?"
+        # Skip providers with no data and no buckets
+        buckets = pdata.get("buckets") or []
+        if status == "unavailable" and not buckets:
+            continue
+
+        plan = pdata.get("plan") or ""
+        subtitle = plan if plan else status
+        section(label, subtitle)
+
+        for bucket in buckets:
+            b_label = bucket.get("bucket_label") or bucket.get("bucket") or "?"
+            pct = bucket.get("used_percent")
+            resets = bucket.get("resets_at")
+            if pct is not None:
+                extra_parts = []
+                if resets:
+                    try:
+                        extra_parts.append(
+                            f"resets {datetime.fromtimestamp(resets).strftime('%m-%d %H:%M')}"
+                        )
+                    except Exception:
+                        pass
+                kv_row(b_label, pct, " · ".join(extra_parts) if extra_parts else "")
+            else:
+                info_row(b_label, str(bucket.get("status") or ""))
+
+        status_detail = pdata.get("status_detail")
+        if status_detail and status not in ("ok", "unavailable"):
+            warn_row(str(status_detail))
+        if pdata.get("estimated"):
+            info_row("note", "may include session data")
+        _emit()
+
     if want_tools:
         rc = glance_tools(period, show_cost=show_cost) or rc
     return rc
 
 
 def _enable_vt() -> None:
-    """Enable VT processing on Windows consoles when possible."""
+    """Enable VT processing on Windows consoles when possible.
+    Windows Terminal processes VT natively, so a failure here is non-fatal —
+    but we do try so that cmd.exe / conhost also work.
+    """
     if os.name != "nt":
         return
     try:
         import ctypes
-
         kernel32 = ctypes.windll.kernel32
         handle = kernel32.GetStdHandle(-11)
         mode = ctypes.c_uint32()
-        if kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
-            # ENABLE_VIRTUAL_TERMINAL_PROCESSING | ENABLE_PROCESSED_OUTPUT
-            kernel32.SetConsoleMode(handle, mode.value | 0x0004 | 0x0001)
+        if not kernel32.GetConsoleMode(handle, ctypes.byref(mode)):
+            return  # not a real console — nothing to enable
+        # ENABLE_VIRTUAL_TERMINAL_PROCESSING (0x0004) makes VT escape
+        # sequences (including alt-screen) work. ENABLE_PROCESSED_OUTPUT
+        # (0x0001) makes \n, \r, \b, \t, \a process as expected.
+        needed = 0x0004 | 0x0001
+        if mode.value & needed == needed:
+            return  # already set
+        kernel32.SetConsoleMode(handle, mode.value | needed)
     except Exception:
-        pass
+        pass  # non-fatal — Windows Terminal works without it
 
 
 def header_lines(watch: bool, interval: int) -> list[str]:
@@ -2054,13 +2019,13 @@ def leave_dashboard() -> None:
     """Restore main screen + show cursor."""
     sys.stdout.write("\x1b[?25h\x1b[?1049l")
     sys.stdout.flush()
-    set_terminal_title("Terminal")
-
 
 def paint_frame(lines: list[str]) -> None:
-    """Redraw the alt-screen in place: home, write lines, clear remainder.
+    """Redraw the alt-screen in place: home, write lines, erase remainder.
+    Reads terminal size each call to handle resize.
 
-    Does not scroll the main terminal scrollback (alt buffer).
+    Important: the last line must NOT have a trailing \r\n — that would
+    scroll the alt-screen buffer when the frame fills the terminal height.
     """
     try:
         size = shutil.get_terminal_size(fallback=(80, 28))
@@ -2075,11 +2040,17 @@ def paint_frame(lines: list[str]) -> None:
             dim(f"  … {len(lines) - budget + 1} more lines (resize terminal)")
         ]
     parts: list[str] = ["\x1b[H"]  # cursor home
-    for line in visible:
-        # Clear to end of line after content so shorter updates don't leave ghosts.
+    n = len(visible)
+    for i, line in enumerate(visible):
+        # \x1b[2K clears the entire line, \r homes to column 0.
+        parts.append("\x1b[2K\r")
         parts.append(line)
-        parts.append("\x1b[K\n")
-    parts.append("\x1b[J")  # clear from cursor to end of screen
+        if i < n - 1:
+            # \r\n advances to the next line start (not the last line).
+            parts.append("\r\n")
+        # Last line: no trailing newline — cursor stays on this line,
+        # \x1b[J below clears everything from here to end of screen.
+    parts.append("\x1b[J")  # clear from last content line to end of screen
     sys.stdout.write("".join(parts))
     sys.stdout.flush()
 
@@ -2285,9 +2256,9 @@ def main(argv: list) -> int:
         "claude": True,
         "clinepass": True,
         "zai": True,
+        "codex": True,
         "moonshot": True,
         "agnes": True,
-        "freebuff": True,
         "iamhc": True,
         "fireworks": True,
         "openrouter": True,
@@ -2303,8 +2274,8 @@ def main(argv: list) -> int:
             print("  --cost  --tools-only  --no-tools  --no-<provider>")
             print("  --only-<provider>")
             print(
-                "  providers: zenmux claude clinepass zai moonshot "
-                "agnes freebuff iamhc fireworks openrouter deepseek"
+                "  providers: zenmux claude clinepass zai codex moonshot "
+                "agnes iamhc fireworks openrouter deepseek"
             )
             print("  watch keys: q quit · r/space refresh now")
             print("  --classic  single-column (no SUGGEST rail)")

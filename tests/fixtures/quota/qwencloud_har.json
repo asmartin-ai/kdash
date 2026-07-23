@@ -1,0 +1,49 @@
+{
+  "log": {
+    "version": "1.2",
+    "creator": {
+      "name": "Firefox",
+      "version": "152.0.6"
+    },
+    "pages": [
+      {
+        "id": "page_1",
+        "pageTimings": {
+          "onContentLoad": 617,
+          "onLoad": 996
+        },
+        "startedDateTime": "2026-07-23T13:09:12.135-05:00",
+        "title": "https://home.qwencloud.com/billing/subscription/token-plan-individual"
+      }
+    ],
+    "entries": [
+      {
+        "request": {
+          "method": "POST",
+          "url": "https://cs-data.qwencloud.com/data/api.json?product=sfm_bailian&action=IntlBroadScopeAspnGateway&api=zeldaHttp.apikeyMgr.%2Ftokenplan%2Fpersonal%2Fapi%2Fv2%2Fusage",
+          "headers": [
+            {
+              "name": "Cookie",
+              "value": "session=abc123; token=xyz789"
+            },
+            {
+              "name": "Content-Type",
+              "value": "application/x-www-form-urlencoded"
+            }
+          ],
+          "postData": {
+            "mimeType": "application/x-www-form-urlencoded",
+            "text": "product=sfm_bailian&action=IntlBroadScopeAspnGateway&sec_token=test-sec-token&region=ap-southeast-1&params=%7B%22Api%22%3A%22zeldaHttp.apikeyMgr.%2Ftokenplan%2Fpersonal%2Fapi%2Fv2%2Fusage%22%2C%22Data%22%3A%7B%22cornerstoneParam%22%3A%7B%22domain%22%3A%22home.qwencloud.com%22%7D%7D%2C%22V%22%3A%221.0%22%7D"
+          }
+        },
+        "response": {
+          "status": 200,
+          "content": {
+            "mimeType": "application/json",
+            "text": "{\n\t\"code\":\"200\",\n\t\"data\":{\n\t\t\"DataV2\":{\n\t\t\t\"data\":{\n\t\t\t\t\"data\":{\n\t\t\t\t\t\"per5HourPercentage\":0.0000834,\n\t\t\t\t\t\"per1WeekResetTime\":1785338340000,\n\t\t\t\t\t\"per5HourResetTime\":1784847540000,\n\t\t\t\t\t\"per1WeekPercentage\":0.0799\n\t\t\t\t},\n\t\t\t\t\"success\":true\n\t\t\t}\n\t\t}\n\t}\n}"
+          }
+        }
+      }
+    ]
+  }
+}
