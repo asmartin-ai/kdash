@@ -14,16 +14,79 @@ from .codex import _parse_time
 from .types import QuotaSnapshot
 
 
-def _har_path() -> Path:
-    return Path(
-        os.environ.get(
-            "QWEN_CLOUD_HAR_PATH",
-            str(Path.home() / ".omp" / "qwencloud-console.har"),
-        )
-    )
+import glob as _glob
+import sqlite3 as _sqlite3
 
 
-# Usage API endpoint (HAR-authenticated)
+def _firefox_cookies_dir() -> str | None:
+    """Find the Firefox profile directory with cookies.sqlite."""
+    base = os.path.expandvars(r"%APPDATA%\Mozilla\Firefox\Profiles")
+    dirs = _glob.glob(os.path.join(base, "*"))
+    for d in dirs:
+        if os.path.exists(os.path.join(d, "cookies.sqlite")):
+            return d
+    return None
+
+
+def _read_firefox_cookies(domain_filter: str = "%.qwencloud.com") -> dict[str, str]:
+    """Read cookies from Firefox for matching domains. Returns {name: value}.
+
+    Security: opens cookies.sqlite in read-only mode (mode=ro), filters strictly
+    by domain suffix. Cookie values are used ONLY for Qwen Cloud API authentication
+    — they are never written to disk, logged, or stored in kdash's database.
+    This is equivalent to what any browser extension with cookie permission does.
+    """
+    profile = _firefox_cookies_dir()
+    if not profile:
+        return {}
+    db = os.path.join(profile, "cookies.sqlite")
+    try:
+        conn = _sqlite3.connect(f"file:{db}?mode=ro", uri=True)
+        rows = conn.execute(
+            "SELECT name, value FROM moz_cookies WHERE host LIKE ?",
+            (domain_filter,),
+        ).fetchall()
+        conn.close()
+        return {name: value for name, value in rows}
+    except Exception:
+        return {}
+
+
+def _qwencloud_cookie_header() -> str:
+    """Build Cookie header from Firefox Qwen Cloud cookies (%.qwencloud.com only)."""
+    cookies = _read_firefox_cookies("%.qwencloud.com")
+    return "; ".join(f"{k}={v}" for k, v in cookies.items()) if cookies else ""
+
+
+def _load_qwencloud_auth() -> tuple[str, str] | None:
+    """Get Firefox cookie header and sec_token for Qwen Cloud usage API.
+
+    Returns (cookie_header, sec_token) on success, or None when Firefox
+    cookies are unavailable or the session is not authenticated.
+    """
+    cookie = _qwencloud_cookie_header()
+    if not cookie:
+        return None
+
+    # Get sec_token from user info endpoint (needs only cookies)
+    headers = {
+        "Cookie": cookie,
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:152.0) Gecko/20100101 Firefox/152.0",
+        "Accept": "application/json",
+    }
+    try:
+        req = urllib.request.Request("https://home.qwencloud.com/tool/user/info.json", headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as r:
+            data = json.loads(r.read())
+        sec_token = (data.get("data") or {}).get("secToken", "")
+        if sec_token:
+            return (cookie, sec_token)
+    except Exception:
+        pass
+    return None
+
+
+# Usage API endpoint (Firefox cookie-authenticated)
 QWEN_CLOUD_USAGE_URL = (
     "https://cs-data.qwencloud.com/data/api.json"
     "?product=sfm_bailian"
@@ -46,16 +109,16 @@ def _status_snapshot(status: str, captured_at: int, raw: dict[str, Any]) -> Quot
 
 def _post_json(url: str, data: bytes, headers: dict[str, str], opener, timeout: float) -> dict[str, Any]:
     """POST with retry on 5xx."""
-    req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-    last_error: HTTPError | None = None
+    last_error: Exception | None = None
     for attempt in range(2):
         try:
+            req = urllib.request.Request(url, data=data, headers=headers)
             with opener(req, timeout=timeout) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
             return result if isinstance(result, dict) else {}
         except HTTPError as exc:
             last_error = exc
-            if exc.code not in {500, 502, 503, 504} or attempt == 1:
+            if exc.code not in {429, 500, 502, 503, 504} or attempt == 1:
                 raise
             time.sleep(0.2)
     assert last_error is not None
@@ -63,76 +126,21 @@ def _post_json(url: str, data: bytes, headers: dict[str, str], opener, timeout: 
 
 
 def _get_json(url: str, headers: dict[str, str], opener, timeout: float) -> dict[str, Any]:
-    """GET with retry on 5xx (model-inventory fallback path)."""
-    req = urllib.request.Request(url, headers=headers)
-    last_error: HTTPError | None = None
+    """GET with retry on 5xx."""
+    last_error: Exception | None = None
     for attempt in range(2):
         try:
+            req = urllib.request.Request(url, headers=headers)
             with opener(req, timeout=timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-            return data if isinstance(data, dict) else {}
+                result = json.loads(resp.read().decode("utf-8"))
+            return result if isinstance(result, dict) else {}
         except HTTPError as exc:
             last_error = exc
-            if exc.code not in {500, 502, 503, 504} or attempt == 1:
+            if exc.code not in {429, 500, 502, 503, 504} or attempt == 1:
                 raise
+            time.sleep(0.2)
     assert last_error is not None
     raise last_error
-
-
-# ── HAR auth extraction ──────────────────────────────────────────────────────
-
-
-def _load_har_auth() -> tuple[str, str, bytes] | None:
-    """Load session auth from a HAR file exported from the Qwen Cloud console.
-
-    Returns (cookie_header, sec_token, post_body_bytes) on success, or None when
-    the HAR file is missing, stale (>24 h), or does not contain the expected
-    POST request.
-    """
-    har_path = _har_path()
-    if not har_path.exists():
-        return None
-
-    mtime = har_path.stat().st_mtime
-    age = time.time() - mtime
-    if age > 86_400:  # 24 hours
-        return None
-
-    try:
-        har = json.loads(har_path.read_text(encoding="utf-8"))
-    except Exception:
-        return None
-
-    entries = har.get("log", {}).get("entries", [])
-    for entry in entries:
-        req = entry.get("request", {})
-        if req.get("method") != "POST":
-            continue
-        url = req.get("url", "")
-        if "cs-data.qwencloud.com" not in url:
-            continue
-
-        # Extract Cookie header value
-        cookie = ""
-        for hdr in req.get("headers", []):
-            if hdr.get("name", "").lower() == "cookie":
-                cookie = hdr.get("value", "")
-                break
-
-        # Grab the raw post body
-        post_text = req.get("postData", {}).get("text", "")
-        if not post_text:
-            continue
-
-        # Extract sec_token from the URL-encoded body
-        params = urllib.parse.parse_qs(post_text)
-        sec_token_list = params.get("sec_token", [])
-        sec_token = sec_token_list[0] if sec_token_list else ""
-
-        if cookie and sec_token:
-            return (cookie, sec_token, post_text.encode("utf-8"))
-
-    return None
 
 
 # ── Usage API (primary) ──────────────────────────────────────────────────────
@@ -144,17 +152,37 @@ def _collect_usage_snapshots(
     captured_at: int,
     timeout: float,
 ) -> list[QuotaSnapshot] | None:
-    """Attempt to collect usage data via the HAR-authenticated API.
+    """Attempt to collect usage data via Firefox cookie-authenticated API.
 
-    Returns a two-bucket snapshot list on success, or None when the HAR file is
-    unavailable or the session has expired (401/403).  The caller falls back to
-    the model-inventory path in that case.
+    Returns a two-bucket snapshot list on success, or None when Firefox
+    cookies are unavailable or the session has expired (401/403).
     """
-    auth = _load_har_auth()
+    auth = _load_qwencloud_auth()
     if auth is None:
         return None
 
-    cookie, sec_token, body = auth
+    cookie, sec_token = auth
+
+    # Build POST body matching the browser's request format
+    params = json.dumps({
+        "Api": "zeldaHttp.apikeyMgr./tokenplan/personal/api/v2/usage",
+        "Data": {
+            "cornerstoneParam": {
+                "domain": "home.qwencloud.com",
+                "consoleSite": "QWENCLOUD",
+                "console": "ONE_CONSOLE",
+                "xsp_lang": "en-US",
+                "protocol": "https",
+            }
+        }
+    }, separators=(",", ":"))
+    body = urllib.parse.urlencode({
+        "product": "sfm_bailian",
+        "action": "IntlBroadScopeAspnGateway",
+        "sec_token": sec_token,
+        "region": "ap-southeast-1",
+        "params": params,
+    }).encode()
 
     headers: dict[str, str] = {
         "Cookie": cookie,

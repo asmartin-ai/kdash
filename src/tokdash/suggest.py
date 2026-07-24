@@ -136,6 +136,7 @@ def build_suggest(
     claude_peak_pct: Optional[float] = None,
     clinepass_peak_pct: Optional[float] = None,
     zai_peak_pct: Optional[float] = None,
+    qwencloud_peak_pct: Optional[float] = None,
     codex_peak_pct: Optional[float] = None,
     codex_plan: Optional[str] = None,
     zenmux_rem5: Optional[float] = None,
@@ -264,6 +265,58 @@ def build_suggest(
                 }
             ],
             "action": "use interactively; headless only with anti-deliberation + oracle",
+        }
+    )
+
+    # --- Qwen Cloud Token Plan ---
+    qc_status = (
+        "hot" if (qwencloud_peak_pct is not None and qwencloud_peak_pct >= HOT)
+        else "warm" if (qwencloud_peak_pct is not None and qwencloud_peak_pct >= WARM)
+        else "active"
+    )
+    # Night discount: 22:00–08:00 UTC+8 = 14:00–00:00 UTC
+    from datetime import datetime, timezone, timedelta
+    now_utc = datetime.now(timezone.utc)
+    cst = timezone(timedelta(hours=8))
+    now_cst = now_utc.astimezone(cst)
+    in_night_window = now_cst.hour >= 22 or now_cst.hour < 8
+    night_note = (
+        "80% night discount active (22–08 UTC+8)"
+        if in_night_window
+        else f"night discount at 22:00 CST ({22 - now_cst.hour}h away)" if now_cst.hour < 22
+        else "night discount ended at 08:00"
+    )
+    plans.append(
+        {
+            "plan": "Qwen Cloud Token Plan",
+            "status": qc_status,
+            "peak_pct": qwencloud_peak_pct,
+            "use_when": "cheap overflow · night discount 22–08 UTC+8",
+            "models": [
+                {
+                    "id": "qwen3.8-max-preview",
+                    "role": "10× usage preview",
+                    "via": "Qwen Cloud SG",
+                    "cost": "Token Plan credits · 90% off promo",
+                    "copy": "qwen3.8-max-preview (10× preview)",
+                },
+                {
+                    "id": "qwen3.7-plus",
+                    "role": "general workhorse",
+                    "via": "Qwen Cloud SG",
+                    "cost": "Token Plan credits",
+                    "copy": "qwen3.7-plus",
+                },
+                {
+                    "id": "glm-5.2 / deepseek-v4-pro",
+                    "role": "hard escalation",
+                    "via": "Qwen Cloud SG",
+                    "cost": "Token Plan credits",
+                    "copy": "glm-5.2 / deepseek-v4-pro",
+                },
+            ],
+            "action": night_note,
+            "note": "Lite $6/mo (700cr/5h, 2500cr/7d); qwen3.8-max-preview = 10× credits promo",
         }
     )
 
@@ -810,13 +863,29 @@ def build_suggest(
     fallbacks = uniq_fb[:5]
 
     deadlines: List[Dict[str, Any]] = []
-    for label, d, days in [
+    for label, end_str, days in [
         ("ZenMux Starter", zenmux_end, zm_days),
         ("ClinePass promo month", clinepass_end, cp_days),
     ]:
         if days is not None and -3 <= days <= 30:
-            deadlines.append({"label": label, "date": d, "days_left": days})
+            deadlines.append({"label": label, "date": end_str, "days_left": days})
 
+    # Free model trial windows (hardcoded — no API available)
+    _today = today
+    for label, end_date_str in [
+        ("Ling 3.0 Flash free", "2026-08-03"),
+        ("Laguna S 2.1 free (Nous)", "2026-08-04"),
+        ("North Mini Code free", "2026-08-17"),
+        ("Step 3.7 Flash free", "2026-08-04"),
+        ("Qwen Cloud night disc.", "2026-09-30"),
+    ]:
+        try:
+            end_dt = date.fromisoformat(end_date_str)
+            d = (end_dt - _today).days
+            if -3 <= d <= 60:
+                deadlines.append({"label": label, "date": end_date_str, "days_left": d})
+        except Exception:
+            pass
     return {
         "schema_version": SCHEMA_VERSION,
         "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -929,7 +998,7 @@ def format_glance_lines(
     shown = 0
     for d in data.get("deadlines") or []:
         days = d.get("days_left")
-        if days is None or days < 0 or days > 14:
+        if days is None or days < 0 or days > 60:
             continue
         label = str(d.get("label") or "").split()[0][:10]
         date_s = str(d.get("date") or "")[:10]

@@ -4966,7 +4966,25 @@
           updatedAgo.textContent = t('quotaUpdatedAgo').replace('{time}', formatRelativeAgo(provider.updated_at));
           titleWrap.appendChild(updatedAgo);
         }
-        // Small muted marker when this provider's card may include estimated
+        // Subscription/trial expiry — read from first bucket that has expires_at
+        const expBucket = buckets.find(b => b.expires_at);
+        if (expBucket && expBucket.expires_at) {
+          const expDt = new Date(expBucket.expires_at * 1000);
+          const daysLeft = Math.ceil((expDt - new Date()) / 86400000);
+          const expLine = document.createElement('div');
+          expLine.className = 'text-xs mt-1 font-semibold';
+          if (daysLeft < 0) {
+            expLine.style.color = 'var(--color-danger)';
+            expLine.textContent = `${t('expires')} ${formatEpochSeconds(expBucket.expires_at)} (${Math.abs(daysLeft)}d ago)`;
+          } else if (daysLeft <= 7) {
+            expLine.style.color = 'var(--color-warning)';
+            expLine.textContent = `${t('expires')} ${formatEpochSeconds(expBucket.expires_at)} (${daysLeft}d)`;
+          } else {
+            expLine.style.color = 'var(--color-muted)';
+            expLine.textContent = `${t('expires')} ${formatEpochSeconds(expBucket.expires_at)}`;
+          }
+          titleWrap.appendChild(expLine);
+        }
         // (session-source, not API-authoritative) data — mirrors the consumption-chart
         // banner's `estimated` semantics but scoped to the current-quota card.
         if (provider.estimated) {

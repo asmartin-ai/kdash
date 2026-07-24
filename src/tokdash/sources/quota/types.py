@@ -17,6 +17,7 @@ class QuotaSnapshot:
     source: str
     status: str
     raw: dict[str, Any]
+    expires_at: int | None = None  # subscription/trial end (Unix timestamp)
 
     def as_dict(self) -> dict[str, Any]:
         return asdict(self)

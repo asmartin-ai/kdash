@@ -575,42 +575,15 @@ def _qwencloud_response_data(
     }
 
 
-def _qwencloud_fake_har(
-    tmp_path: Path, monkeypatch, *, cookie: str = "session=abc123", sec_token: str = "test-sec-token"
-) -> Path:
-    """Write a minimal HAR fixture and monkeypatch QWEN_CLOUD_HAR_PATH to point at it."""
-    har = {
-        "log": {
-            "entries": [
-                {
-                    "request": {
-                        "method": "POST",
-                        "url": "https://cs-data.qwencloud.com/data/api.json?product=sfm_bailian&action=IntlBroadScopeAspnGateway&api=zeldaHttp.apikeyMgr.%2Ftokenplan%2Fpersonal%2Fapi%2Fv2%2Fusage",
-                        "headers": [
-                            {"name": "Cookie", "value": cookie},
-                            {"name": "Content-Type", "value": "application/x-www-form-urlencoded"},
-                        ],
-                        "postData": {
-                            "mimeType": "application/x-www-form-urlencoded",
-                            "text": f"product=sfm_bailian&action=IntlBroadScopeAspnGateway&sec_token={sec_token}&region=ap-southeast-1&params=%7B%22Api%22%3A%22zeldaHttp.apikeyMgr.%2Ftokenplan%2Fpersonal%2Fapi%2Fv2%2Fusage%22%7D",
-                        },
-                    },
-                    "response": {
-                        "status": 200,
-                        "content": {"mimeType": "application/json", "text": json.dumps(_qwencloud_response_data())},
-                    },
-                }
-            ]
-        }
-    }
-    har_path = tmp_path / "qwencloud_har.json"
-    har_path.write_text(json.dumps(har), encoding="utf-8")
-    monkeypatch.setenv("QWEN_CLOUD_HAR_PATH", str(har_path))
-    return har_path
+def _qwencloud_fake_auth(monkeypatch, *, cookie: str = "session=abc123", sec_token: str = "test-sec-token"):
+    """Monkeypatch _load_qwencloud_auth to return fake Firefox cookie auth."""
+    def fake_auth():
+        return (cookie, sec_token)
+    monkeypatch.setattr(qwencloud, "_load_qwencloud_auth", fake_auth)
 
 
-def test_qwencloud_api_parses_usage_buckets(monkeypatch, tmp_path):
-    _qwencloud_fake_har(tmp_path, monkeypatch)
+def test_qwencloud_api_parses_usage_buckets(monkeypatch):
+    _qwencloud_fake_auth(monkeypatch)
 
     seen_cookie = None
     seen_body = None
@@ -625,22 +598,22 @@ def test_qwencloud_api_parses_usage_buckets(monkeypatch, tmp_path):
 
     by_bucket = {s.bucket: s for s in snapshots}
     assert set(by_bucket) == {"5h", "7d"}
-    assert by_bucket["5h"].used_percent == 0.0083  # 0.0000834 * 100
+    assert by_bucket["5h"].used_percent == 0.0083
     assert by_bucket["5h"].bucket_label == "5-hour"
-    assert by_bucket["5h"].resets_at == 1_784_847_540  # ms → s
-    assert by_bucket["7d"].used_percent == 7.99  # 0.0799 * 100
+    assert by_bucket["5h"].resets_at == 1_784_847_540
+    assert by_bucket["7d"].used_percent == 7.99
     assert by_bucket["7d"].bucket_label == "7-day"
-    assert by_bucket["7d"].resets_at == 1_785_338_340  # ms → s
+    assert by_bucket["7d"].resets_at == 1_785_338_340
     assert all(s.provider == "qwencloud" for s in snapshots)
     assert all(s.source == "qwencloud_api" for s in snapshots)
     assert all(s.status == "ok" for s in snapshots)
     assert seen_cookie == "session=abc123"
-    assert seen_body == b"product=sfm_bailian&action=IntlBroadScopeAspnGateway&sec_token=test-sec-token&region=ap-southeast-1&params=%7B%22Api%22%3A%22zeldaHttp.apikeyMgr.%2Ftokenplan%2Fpersonal%2Fapi%2Fv2%2Fusage%22%7D"
+    assert seen_body == b"product=sfm_bailian&action=IntlBroadScopeAspnGateway&sec_token=test-sec-token&region=ap-southeast-1&params=%7B%22Api%22%3A%22zeldaHttp.apikeyMgr.%2Ftokenplan%2Fpersonal%2Fapi%2Fv2%2Fusage%22%2C%22Data%22%3A%7B%22cornerstoneParam%22%3A%7B%22domain%22%3A%22home.qwencloud.com%22%2C%22consoleSite%22%3A%22QWENCLOUD%22%2C%22console%22%3A%22ONE_CONSOLE%22%2C%22xsp_lang%22%3A%22en-US%22%2C%22protocol%22%3A%22https%22%7D%7D%7D"
 
 
-def test_qwencloud_api_falls_back_to_models_when_har_missing(monkeypatch):
-    """When no HAR file is available and QWEN_CLOUD_API_KEY is set, fall back to model list."""
-    monkeypatch.setenv("QWEN_CLOUD_HAR_PATH", str(_FIXTURE_DIR / "nonexistent_har.json"))
+def test_qwencloud_api_falls_back_when_no_firefox_cookies(monkeypatch):
+    """When Firefox cookies are unavailable, fall back to API key model list."""
+    monkeypatch.setattr(qwencloud, "_load_qwencloud_auth", lambda: None)
     monkeypatch.setenv("QWEN_CLOUD_API_KEY", "test-key")
 
     def opener(req, timeout=15):
@@ -656,9 +629,9 @@ def test_qwencloud_api_falls_back_to_models_when_har_missing(monkeypatch):
     assert snapshots[0].raw.get("model_count") == 2
 
 
-def test_qwencloud_api_session_expired_falls_back(monkeypatch, tmp_path):
-    """When the HAR exists but the server returns 401, fall back to model inventory."""
-    _qwencloud_fake_har(tmp_path, monkeypatch)
+def test_qwencloud_api_session_expired_falls_back(monkeypatch):
+    """When usage API returns 401, fall back to model inventory."""
+    _qwencloud_fake_auth(monkeypatch)
     monkeypatch.setenv("QWEN_CLOUD_API_KEY", "test-key")
 
     canary_fired = False
@@ -674,18 +647,15 @@ def test_qwencloud_api_session_expired_falls_back(monkeypatch, tmp_path):
 
     snapshots = qwencloud.collect_qwencloud_api_snapshots(opener=opener, now=1_782_907_200)
 
-    assert canary_fired  # confirms usage API was indeed attempted
+    assert canary_fired
     assert len(snapshots) == 1
     assert snapshots[0].bucket == "plan"
     assert snapshots[0].status == "ok"
 
 
-def test_qwencloud_api_stale_har_returns_no_key(monkeypatch, tmp_path):
-    """Stale HAR (>24h) does not block fallback — no API key means no_key status."""
-    har_path = _qwencloud_fake_har(tmp_path, monkeypatch)
-    # Set the file's mtime to 48 hours ago
-    import os, time
-    os.utime(har_path, (time.time() - 172_800, time.time() - 172_800))
+def test_qwencloud_api_no_key_when_no_cookies_no_api_key(monkeypatch):
+    """When no Firefox cookies AND no API key, return no_key status."""
+    monkeypatch.setattr(qwencloud, "_load_qwencloud_auth", lambda: None)
     monkeypatch.delenv("QWEN_CLOUD_API_KEY", raising=False)
 
     snapshots = qwencloud.collect_qwencloud_api_snapshots(now=1_782_907_200)
@@ -695,25 +665,12 @@ def test_qwencloud_api_stale_har_returns_no_key(monkeypatch, tmp_path):
     assert "session expired" in str(snapshots[0].raw.get("error", ""))
 
 
-def test_qwencloud_api_unavailable_when_no_har_no_key(monkeypatch):
-    monkeypatch.setenv("QWEN_CLOUD_HAR_PATH", str(_FIXTURE_DIR / "nonexistent_har.json"))
-    monkeypatch.delenv("QWEN_CLOUD_API_KEY", raising=False)
-
-    snapshots = qwencloud.collect_qwencloud_api_snapshots(now=1_782_907_200)
-
-    assert len(snapshots) == 1
-    assert snapshots[0].status == "no_key"
-    assert "session expired" in str(snapshots[0].raw.get("error", ""))
-
-
-def test_qwencloud_api_stale_token_on_401_with_no_fallback_key(monkeypatch, tmp_path):
-    _qwencloud_fake_har(tmp_path, monkeypatch)
+def test_qwencloud_api_stale_token_on_401_with_no_fallback_key(monkeypatch):
+    _qwencloud_fake_auth(monkeypatch)
     monkeypatch.delenv("QWEN_CLOUD_API_KEY", raising=False)
 
     def opener(req, timeout=15):
-        if "api.json" in req.full_url:
-            raise HTTPError(req.full_url, 401, "Unauthorized", {}, None)
-        raise AssertionError(f"unexpected url: {req.full_url}")
+        raise HTTPError(req.full_url, 401, "Unauthorized", {}, None)
 
     snapshots = qwencloud.collect_qwencloud_api_snapshots(opener=opener, now=1_782_907_200)
 

@@ -16,7 +16,7 @@ ZENMUX_SUBSCRIPTION_PATH = "subscription/detail"
 ZENMUX_PAYG_PATH = "payg/balance"
 
 
-def _status_snapshot(status: str, captured_at: int, raw: dict[str, Any], plan: str | None = None) -> QuotaSnapshot:
+def _status_snapshot(status: str, captured_at: int, raw: dict[str, Any], plan: str | None = None, expires_at: int | None = None) -> QuotaSnapshot:
     return QuotaSnapshot(
         "zenmux",
         "default",
@@ -29,6 +29,7 @@ def _status_snapshot(status: str, captured_at: int, raw: dict[str, Any], plan: s
         "zenmux_api",
         status,
         raw,
+        expires_at=expires_at,
     )
 
 
@@ -60,13 +61,13 @@ def _get_json(url: str, headers: dict[str, str], opener, timeout: float) -> dict
     assert last_error is not None
     raise last_error
 
-
 def _bucket_snapshot(
     bucket: str,
     label: str,
     quota: dict[str, Any],
     plan_label: str | None,
     captured_at: int,
+    expires_at: int | None = None,
 ) -> QuotaSnapshot:
     try:
         used_raw = quota.get("usage_percentage")
@@ -94,6 +95,7 @@ def _bucket_snapshot(
         "zenmux_api",
         "ok",
         raw,
+        expires_at=expires_at,
     )
 
 
@@ -131,12 +133,13 @@ def collect_zenmux_api_snapshots(
     sub = sub_payload.get("data") if isinstance(sub_payload.get("data"), dict) else {}
     plan_payload = sub.get("plan") if isinstance(sub.get("plan"), dict) else {}
     plan_label = _plan_label(plan_payload)
+    plan_expiry = _parse_time(plan_payload.get("expires_at"))
     q5 = sub.get("quota_5_hour") if isinstance(sub.get("quota_5_hour"), dict) else {}
     q7 = sub.get("quota_7_day") if isinstance(sub.get("quota_7_day"), dict) else {}
 
     out: list[QuotaSnapshot] = [
-        _bucket_snapshot("5h", "5-hour", q5, plan_label, captured_at),
-        _bucket_snapshot("7d", "7-day", q7, plan_label, captured_at),
+        _bucket_snapshot("5h", "5-hour", q5, plan_label, captured_at, expires_at=plan_expiry),
+        _bucket_snapshot("7d", "7-day", q7, plan_label, captured_at, expires_at=plan_expiry),
     ]
 
     # PAYG balance is optional — fetch after the main subscription detail so a transient

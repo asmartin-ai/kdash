@@ -1629,6 +1629,7 @@ def _advice_from_records(records: list[dict[str, Any]]) -> list[str]:
     cl = _section_peak(records, "CLAUDE")
     cp = _section_peak(records, "CLINEPASS")
     zai = _section_peak(records, "Z.AI")
+    qc = _section_peak(records, "QWEN")
     rem5, rem7, max5, max7 = _zenmux_flows_left(records)
 
     # ZenMux plan end from section subtitle
@@ -1677,12 +1678,12 @@ def _advice_from_records(records: list[dict[str, Any]]) -> list[str]:
             lines.insert(2, f"Flows 7d {rem7:.0f} left")
         lines.append("Tip: pip install -e tokdash-fork")
         return lines
-
     data = build_suggest(
         zenmux_peak_pct=zm,
         claude_peak_pct=cl,
         clinepass_peak_pct=cp,
         zai_peak_pct=zai,
+        qwencloud_peak_pct=qc,
         zenmux_rem5=rem5,
         zenmux_rem7=rem7,
         zenmux_max5=max5,
@@ -1916,7 +1917,23 @@ def render(
             continue
 
         plan = pdata.get("plan") or ""
-        subtitle = plan if plan else status
+        subtitle_parts = [plan] if plan else [status]
+        # Show subscription/trial expiry when available
+        expiry = None
+        for bucket in buckets:
+            e = bucket.get("expires_at")
+            if e:
+                expiry = e
+                break
+        if expiry:
+            try:
+                exp_dt = datetime.fromtimestamp(expiry)
+                days_left = (exp_dt - datetime.now()).days
+                if days_left <= 30:
+                    subtitle_parts.append(f"exp {exp_dt.strftime('%m-%d')} ({days_left}d)")
+            except Exception:
+                pass
+        subtitle = " · ".join(subtitle_parts)
         section(label, subtitle)
 
         for bucket in buckets:
@@ -1935,13 +1952,33 @@ def render(
                 kv_row(b_label, pct, " · ".join(extra_parts) if extra_parts else "")
             else:
                 info_row(b_label, str(bucket.get("status") or ""))
-
         status_detail = pdata.get("status_detail")
         if status_detail and status not in ("ok", "unavailable"):
             warn_row(str(status_detail))
         if pdata.get("estimated"):
             info_row("note", "may include session data")
-        _emit()
+        # Warn when subscription expires within 7 days
+        if expiry:
+            try:
+                exp_dt = datetime.fromtimestamp(expiry)
+                days_left = (exp_dt - datetime.now()).days
+                if 0 <= days_left <= 7:
+                    warn_row(f"expires in {days_left}d — {exp_dt.strftime('%Y-%m-%d')}")
+                elif days_left < 0:
+                    warn_row(f"expired {abs(days_left)}d ago — {exp_dt.strftime('%Y-%m-%d')}")
+            except Exception:
+                pass
+        # Qwen Cloud staleness: Firefox cookies are refreshed by the browser,
+        # but the API response is cached. Flag when >5h old (quota window length).
+        if name == "qwencloud" and buckets:
+            for bucket in buckets:
+                if bucket.get("bucket") == "5h":
+                    captured = bucket.get("captured_at")
+                    if captured:
+                        age_h = (int(datetime.now().timestamp()) - captured) / 3600
+                        if age_h > 5:
+                            info_row("stale", f"5h data {age_h:.0f}h old — restart kdash or wait for next poll")
+                    break
 
     if want_tools:
         rc = glance_tools(period, show_cost=show_cost) or rc
