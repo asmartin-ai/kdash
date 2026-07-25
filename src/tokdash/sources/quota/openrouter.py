@@ -27,6 +27,7 @@ def _status_snapshot(status: str, captured_at: int, raw: dict[str, Any], plan: s
         "openrouter_api",
         status,
         raw,
+        balance_state="error",
     )
 
 
@@ -107,7 +108,6 @@ def collect_openrouter_api_snapshots(
         "total_credits": total_credits,
         "total_usage": total_usage,
     }
-
     return [
         QuotaSnapshot(
             "openrouter",
@@ -121,5 +121,10 @@ def collect_openrouter_api_snapshots(
             "openrouter_api",
             "ok",
             raw,
+            unit="usd",
+            amount_remaining=float(kd.get("limit_remaining") or 0),
+            amount_granted=float(kd.get("limit") or 0),
+            source_type="api",
+            balance_state="fresh",
         )
     ]

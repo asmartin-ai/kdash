@@ -8,7 +8,7 @@ from urllib.error import HTTPError
 
 import pytest
 
-from tokdash.sources.quota import antigravity, clinepass, codex, omp, qwencloud, zenmux
+from tokdash.sources.quota import antigravity, clinepass, codex, deepseek, moonshot, omp, openrouter, qwencloud, zenmux
 
 _FIXTURE_DIR = Path(__file__).parent / "fixtures" / "quota"
 
@@ -677,3 +677,299 @@ def test_qwencloud_api_stale_token_on_401_with_no_fallback_key(monkeypatch):
     assert len(snapshots) == 1
     assert snapshots[0].status == "no_key"
     assert "session expired" in str(snapshots[0].raw.get("error", ""))
+
+
+# ── balance collector tests (DeepSeek, Moonshot, OpenRouter) ──────────
+
+
+def test_deepseek_balance_success(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-deepseek")
+    payload = {
+        "balance_infos": [
+            {"total_balance": 14.55, "topped_up_balance": 10.0, "currency": "USD"}
+        ]
+    }
+    seen_auth = []
+
+    def opener(req, timeout=15):
+        seen_auth.append(req.get_header("Authorization"))
+        return FakeResponse(payload)
+
+    snapshots = deepseek.collect_deepseek_api_snapshots(opener=opener, now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    s = snapshots[0]
+    assert s.provider == "deepseek"
+    assert s.bucket == "balance"
+    assert s.unit == "usd"
+    assert s.amount_remaining == 14.55
+    assert s.amount_granted == 10.0
+    assert s.source_type == "api"
+    assert s.balance_state == "fresh"
+    assert s.status.startswith("ok")
+
+
+def test_deepseek_balance_stale_token(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-deepseek")
+
+    def opener(_req, timeout=15):
+        raise HTTPError("https://api.deepseek.com/user/balance", 401, "Unauthorized", {}, None)
+
+    snapshots = deepseek.collect_deepseek_api_snapshots(opener=opener, now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    s = snapshots[0]
+    assert s.balance_state == "error"
+    assert s.status == "stale_token"
+    assert s.unit is None
+    assert s.amount_remaining is None
+
+
+def test_deepseek_balance_parse_failure(monkeypatch):
+    monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-test-deepseek")
+
+    def opener(_req, timeout=15):
+        return FakeResponse({"error": "something broke"})
+
+    snapshots = deepseek.collect_deepseek_api_snapshots(opener=opener, now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    s = snapshots[0]
+    assert s.balance_state == "error"
+    assert s.status == "fetch_error"
+    assert s.amount_remaining is None
+
+
+def test_moonshot_balance_success(monkeypatch):
+    monkeypatch.setenv("MOONSHOT_API_KEY", "sk-test-moonshot")
+    balance_payload = {
+        "data": {
+            "available_balance": 10.486,
+            "cash_balance": 10.486,
+            "voucher_balance": 0.0,
+        }
+    }
+    models_payload = {"data": []}
+    seen_urls = []
+
+    def opener(req, timeout=15):
+        seen_urls.append(req.full_url)
+        if "balance" in req.full_url:
+            return FakeResponse(balance_payload)
+        return FakeResponse(models_payload)
+
+    snapshots = moonshot.collect_moonshot_api_snapshots(opener=opener, now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    s = snapshots[0]
+    assert s.provider == "moonshot"
+    assert s.bucket == "balance"
+    assert s.unit == "usd"
+    assert s.amount_remaining == 10.486
+    assert s.amount_granted == 10.486
+    assert s.source_type == "api"
+    assert s.balance_state == "fresh"
+
+
+def test_moonshot_balance_stale_token(monkeypatch):
+    monkeypatch.setenv("MOONSHOT_API_KEY", "sk-test-moonshot")
+
+    def opener(_req, timeout=15):
+        raise HTTPError("https://api.moonshot.ai/v1/users/me/balance", 401, "Unauthorized", {}, None)
+
+    snapshots = moonshot.collect_moonshot_api_snapshots(opener=opener, now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    s = snapshots[0]
+    assert s.balance_state == "error"
+    assert s.status == "stale_token"
+    assert s.unit is None
+    assert s.amount_remaining is None
+
+
+def test_openrouter_balance_success(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-openrouter")
+    key_payload = {
+        "data": {
+            "limit": 5.0,
+            "limit_remaining": 4.242,
+            "usage": 0.758,
+            "is_free_tier": False,
+        }
+    }
+    credits_payload = {
+        "data": {
+            "total_credits": 5.0,
+            "total_usage": 0.758,
+        }
+    }
+    seen_urls = []
+
+    def opener(req, timeout=15):
+        seen_urls.append(req.full_url)
+        if "credits" in req.full_url:
+            return FakeResponse(credits_payload)
+        return FakeResponse(key_payload)
+
+    snapshots = openrouter.collect_openrouter_api_snapshots(opener=opener, now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    s = snapshots[0]
+    assert s.provider == "openrouter"
+    assert s.unit == "usd"
+    assert s.amount_remaining == 4.242
+    assert s.amount_granted == 5.0
+    assert s.source_type == "api"
+    assert s.balance_state == "fresh"
+
+
+def test_openrouter_balance_stale_token(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-openrouter")
+
+    def opener(_req, timeout=15):
+        raise HTTPError("https://openrouter.ai/api/v1/key", 401, "Unauthorized", {}, None)
+
+    snapshots = openrouter.collect_openrouter_api_snapshots(opener=opener, now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    s = snapshots[0]
+    assert s.balance_state == "error"
+    assert s.status == "stale_token"
+    assert s.unit is None
+    assert s.amount_remaining is None
+
+
+def test_openrouter_balance_fetch_error(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "sk-test-openrouter")
+
+    def opener(_req, timeout=15):
+        raise HTTPError("https://openrouter.ai/api/v1/credits", 503, "Service Unavailable", {}, None)
+
+    snapshots = openrouter.collect_openrouter_api_snapshots(opener=opener, now=1_782_907_200)
+
+    assert len(snapshots) == 1
+    s = snapshots[0]
+    assert s.balance_state == "error"
+    assert s.status == "fetch_error"
+    assert s.unit is None
+    assert s.amount_remaining is None
+
+
+# ── balance staleness tests ─────────────────────────────────────────────
+
+
+def test_balance_stale_when_older_than_30min(monkeypatch):
+    from tokdash.sources.quota import quota_state
+    import tokdash.sources.quota as quota_module
+    from tokdash.sources.quota.types import QuotaSnapshot
+    import datetime as dt_module
+
+    monkeypatch.setattr(quota_module, "persistent_usage_db_enabled", lambda: False)
+    now_dt = dt_module.datetime(2026, 7, 25, 12, 0, 0, tzinfo=dt_module.timezone.utc)
+    now_ts = int(now_dt.timestamp())
+    captured_at = now_ts - 1810  # 30 min 10 sec ago = stale
+
+    snapshot = QuotaSnapshot(
+        "deepseek", "default", "balance", "DeepSeek Balance", None, None, None,
+        captured_at, "deepseek_api", "ok", {},
+        unit="usd", amount_remaining=50.0, amount_granted=50.0,
+        source_type="api", balance_state="fresh",
+    )
+    quota_module._CURRENT_SNAPSHOTS = [snapshot]
+
+    class _FakeNow:
+        @classmethod
+        def now(cls, tz=None):
+            return now_dt
+    monkeypatch.setattr(quota_module, "datetime", _FakeNow)
+
+    state = quota_state()
+    ds = state["providers"].get("deepseek", {})
+    buckets = ds.get("buckets", [])
+    assert len(buckets) >= 1
+    bal_bucket = buckets[0]
+    assert bal_bucket["balance_state"] == "stale", f"expected stale, got {bal_bucket['balance_state']}"
+    assert bal_bucket["amount_remaining"] == 50.0  # amount preserved
+
+    quota_module._CURRENT_SNAPSHOTS = []
+
+
+def test_balance_fresh_when_within_30min(monkeypatch):
+    from tokdash.sources.quota import quota_state
+    import tokdash.sources.quota as quota_module
+    from tokdash.sources.quota.types import QuotaSnapshot
+    import datetime as dt_module
+
+    monkeypatch.setattr(quota_module, "persistent_usage_db_enabled", lambda: False)
+    now_dt = dt_module.datetime(2026, 7, 25, 12, 0, 0, tzinfo=dt_module.timezone.utc)
+    now_ts = int(now_dt.timestamp())
+    captured_at = now_ts - 300  # 5 min ago = still fresh
+
+    snapshot = QuotaSnapshot(
+        "deepseek", "default", "balance", "DeepSeek Balance", None, None, None,
+        captured_at, "deepseek_api", "ok", {},
+        unit="usd", amount_remaining=100.0, amount_granted=100.0,
+        source_type="api", balance_state="fresh",
+    )
+    quota_module._CURRENT_SNAPSHOTS = [snapshot]
+
+    class _FakeNow:
+        @classmethod
+        def now(cls, tz=None):
+            return now_dt
+    monkeypatch.setattr(quota_module, "datetime", _FakeNow)
+
+    state = quota_state()
+    ds = state["providers"].get("deepseek", {})
+    buckets = ds.get("buckets", [])
+    assert len(buckets) >= 1
+    bal_bucket = buckets[0]
+    assert bal_bucket["balance_state"] == "fresh", f"expected fresh, got {bal_bucket['balance_state']}"
+
+    quota_module._CURRENT_SNAPSHOTS = []
+
+
+def test_balance_show_filters_non_balance_providers(monkeypatch):
+    from tokdash.sources.quota import quota_state
+    import tokdash.sources.quota as quota_module
+    from tokdash.sources.quota.types import QuotaSnapshot
+    import datetime as dt_module
+
+    monkeypatch.setattr(quota_module, "persistent_usage_db_enabled", lambda: False)
+    now_dt = dt_module.datetime(2026, 7, 25, 12, 0, 0, tzinfo=dt_module.timezone.utc)
+    now_ts = int(now_dt.timestamp())
+
+    # Insert a balance snapshot (deepseek with balance fields)
+    bal_snap = QuotaSnapshot(
+        "deepseek", "default", "balance", "DeepSeek Balance", None, None, None,
+        now_ts, "deepseek_api", "ok", {},
+        unit="usd", amount_remaining=50.0, amount_granted=50.0,
+        source_type="api", balance_state="fresh",
+    )
+    # Insert a non-balance snapshot (codex with no balance fields)
+    non_bal_snap = QuotaSnapshot(
+        "codex", "default", "7d", "7-day window", 40.0, 1_783_100_000, "pro",
+        now_ts, "codex_session", "ok", {},
+    )
+    quota_module._CURRENT_SNAPSHOTS = [bal_snap, non_bal_snap]
+
+    class _FakeNow:
+        @classmethod
+        def now(cls, tz=None):
+            return now_dt
+    monkeypatch.setattr(quota_module, "datetime", _FakeNow)
+
+    state = quota_state()
+
+    # Filter the same way balance_command does
+    filtered = {
+        name: info
+        for name, info in state["providers"].items()
+        if any(b.get("balance_state") is not None for b in info.get("buckets", []))
+    }
+
+    assert "deepseek" in filtered
+    assert "codex" not in filtered
+
+    quota_module._CURRENT_SNAPSHOTS = []
+

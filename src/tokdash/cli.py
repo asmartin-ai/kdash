@@ -29,8 +29,11 @@ class TokdashArgumentParser(argparse.ArgumentParser):
         parsed = super().parse_args(args, namespace)
         if getattr(parsed, "command", None) == "quota":
             parsed.quota_action = getattr(parsed, "db_action", "show")
+        elif getattr(parsed, "command", None) == "balance":
+            parsed.balance_action = getattr(parsed, "db_action", "show")
         else:
             parsed.quota_action = None
+            parsed.balance_action = None
         return parsed
 
 
@@ -81,7 +84,7 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
         "command",
         nargs="?",
         default="serve",
-        choices=["serve", "export", "db", "quota", "version", "setup", "doctor", "update", "uninstall", "glance"],
+        choices=["serve", "export", "db", "quota", "balance", "version", "setup", "doctor", "update", "uninstall", "glance"],
         help="Command (default: serve)",
     )
     parser.add_argument(
@@ -841,6 +844,22 @@ def quota_command(args) -> int:
     raise SystemExit(f"Unknown quota action: {action}")
 
 
+def balance_command(args) -> int:
+    action = args.balance_action or "show"
+    if action == "show" or action == "status":
+        from .sources.quota import quota_state
+
+        state = quota_state()
+        state["providers"] = {
+            name: info
+            for name, info in state["providers"].items()
+            if any(b.get("balance_state") is not None for b in info.get("buckets", []))
+        }
+        _emit_json(state, args.pretty, args.output)
+        return 0
+    raise SystemExit(f"Unknown balance action: {action}")
+
+
 def cli(argv: list[str] | None = None, prog: str = "tokdash") -> int:
     parser = build_parser(prog=prog)
     args = parser.parse_args(argv)
@@ -876,6 +895,9 @@ def cli(argv: list[str] | None = None, prog: str = "tokdash") -> int:
 
     if args.command == "quota":
         return quota_command(args)
+
+    if args.command == "balance":
+        return balance_command(args)
 
     if args.command == "glance":
         # kdash TUI: a top-like alt-screen dashboard with provider meters.

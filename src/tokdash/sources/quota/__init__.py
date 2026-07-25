@@ -491,6 +491,11 @@ def quota_state(store: UsageEntryStore | None = None) -> dict[str, Any]:
                 "captured_at",
                 "source",
                 "status",
+                "unit",
+                "amount_remaining",
+                "amount_granted",
+                "source_type",
+                "balance_state",
             )
         }
         used_percent = bucket_row.get("used_percent")
@@ -508,8 +513,19 @@ def quota_state(store: UsageEntryStore | None = None) -> dict[str, Any]:
     providers["claude"]["credential_path"] = claude_plan.get("credential_path")
     providers["claude"]["tier"] = claude_plan.get("tier")
 
+    # Balance staleness: a balance snapshot older than 30 min (the default poll interval)
+    # is stale — a draining cash pool must never show a cached dollar value as current.
+    _stale_threshold = 1800
+    _now_s = int(datetime.now(timezone.utc).timestamp())
+    for ref in providers.values():
+        for bucket in ref.get("buckets", []):
+            if bucket.get("balance_state") == "fresh":
+                captured = bucket.get("captured_at")
+                if captured and (_now_s - int(captured)) > _stale_threshold:
+                    bucket["balance_state"] = "stale"
+
     interval_seconds, interval_source = config.effective_poll_interval()
-    now = int(datetime.now(timezone.utc).timestamp())
+    now = _now_s
     return {
         "providers": providers,
         "consent": consent,

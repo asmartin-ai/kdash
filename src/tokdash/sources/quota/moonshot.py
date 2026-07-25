@@ -27,6 +27,7 @@ def _status_snapshot(status: str, captured_at: int, raw: dict[str, Any]) -> Quot
         "moonshot_api",
         status,
         raw,
+        balance_state="error",
     )
 
 
@@ -123,7 +124,6 @@ def collect_moonshot_api_snapshots(
         "model_count": len(model_ids),
         "has_kimi_k3": has_kimi_k3,
     }
-
     return [
         QuotaSnapshot(
             "moonshot",
@@ -137,5 +137,10 @@ def collect_moonshot_api_snapshots(
             "moonshot_api",
             status,
             raw,
+            unit="usd",
+            amount_remaining=available_balance,
+            amount_granted=cash_balance,
+            source_type="api",
+            balance_state="fresh",
         )
     ]

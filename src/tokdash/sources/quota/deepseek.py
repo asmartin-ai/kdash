@@ -14,7 +14,8 @@ DEEPSEEK_BALANCE_URL = "https://api.deepseek.com/user/balance"
 
 
 def _status_snapshot(status: str, captured_at: int, raw: dict[str, Any]) -> QuotaSnapshot:
-    return QuotaSnapshot("deepseek", "default", "balance", "DeepSeek Balance", None, None, None, captured_at, "deepseek_api", status, raw)
+    return QuotaSnapshot("deepseek", "default", "balance", "DeepSeek Balance", None, None, None, captured_at, "deepseek_api", status, raw,
+                         balance_state="error")
 
 
 def _get_json(url: str, headers: dict[str, str], opener, timeout: float) -> dict[str, Any]:
@@ -75,7 +76,6 @@ def collect_deepseek_api_snapshots(
     if topped_up_balance is not None:
         parts.append(f"(top-up: {topped_up_balance})")
     status = " ".join(parts)
-
     return [
         QuotaSnapshot(
             "deepseek",
@@ -89,5 +89,10 @@ def collect_deepseek_api_snapshots(
             "deepseek_api",
             status,
             payload,
+            unit="usd",
+            amount_remaining=total_balance,
+            amount_granted=topped_up_balance or total_balance,
+            source_type="api",
+            balance_state="fresh",
         )
     ]
