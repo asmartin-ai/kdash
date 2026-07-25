@@ -865,6 +865,19 @@ def get_quota_history(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.get("/api/stack")
+def get_stack() -> Dict[str, Any]:
+    """Stack-at-a-glance: model roles, deadline expiries, local service
+    health, and agent-hub wiring checks.  Every source degrades independently.
+    """
+    try:
+        from .sources.stack import collect_stack_snapshot
+
+        return {"status": "ok", **collect_stack_snapshot()}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 def _try_begin_quota_refresh() -> float:
     """Atomically check the refresh cooldown and, if clear, reserve the slot.
 

@@ -31,9 +31,12 @@ class TokdashArgumentParser(argparse.ArgumentParser):
             parsed.quota_action = getattr(parsed, "db_action", "show")
         elif getattr(parsed, "command", None) == "balance":
             parsed.balance_action = getattr(parsed, "db_action", "show")
+        elif getattr(parsed, "command", None) == "stack":
+            parsed.stack_action = getattr(parsed, "db_action", None)
         else:
             parsed.quota_action = None
             parsed.balance_action = None
+            parsed.stack_action = None
         return parsed
 
 
@@ -84,7 +87,7 @@ def build_parser(prog: str) -> argparse.ArgumentParser:
         "command",
         nargs="?",
         default="serve",
-        choices=["serve", "export", "db", "quota", "balance", "version", "setup", "doctor", "update", "uninstall", "glance"],
+        choices=["serve", "export", "db", "quota", "balance", "stack", "version", "setup", "doctor", "update", "uninstall", "glance"],
         help="Command (default: serve)",
     )
     parser.add_argument(
@@ -860,6 +863,13 @@ def balance_command(args) -> int:
     raise SystemExit(f"Unknown balance action: {action}")
 
 
+def stack_command(args) -> int:
+    from .sources.stack import collect_stack_snapshot
+
+    _emit_json(collect_stack_snapshot(), args.pretty, args.output)
+    return 0
+
+
 def cli(argv: list[str] | None = None, prog: str = "tokdash") -> int:
     parser = build_parser(prog=prog)
     args = parser.parse_args(argv)
@@ -899,6 +909,9 @@ def cli(argv: list[str] | None = None, prog: str = "tokdash") -> int:
     if args.command == "balance":
         return balance_command(args)
 
+    if args.command == "stack":
+        return stack_command(args)
+
     if args.command == "glance":
         # kdash TUI: a top-like alt-screen dashboard with provider meters.
         from .glance import main as glance_main
@@ -917,3 +930,7 @@ def cli(argv: list[str] | None = None, prog: str = "tokdash") -> int:
 
 def main() -> None:
     raise SystemExit(cli())
+
+
+if __name__ == "__main__":
+    main()
