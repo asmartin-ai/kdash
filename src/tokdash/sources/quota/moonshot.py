@@ -1,13 +1,12 @@
 from __future__ import annotations
 
-import json
 import os
 from datetime import datetime, timezone
 from typing import Any
 from urllib.error import HTTPError
 import urllib.request
-import time
 
+from ._http import get_json
 from .types import QuotaSnapshot
 
 MOONSHOT_BALANCE_URL = "https://api.moonshot.ai/v1/users/me/balance"
@@ -31,25 +30,6 @@ def _status_snapshot(status: str, captured_at: int, raw: dict[str, Any]) -> Quot
     )
 
 
-def _get_json(url: str, headers: dict[str, str], opener, timeout: float) -> dict[str, Any]:
-    req = urllib.request.Request(url, headers=headers)
-    last_error: HTTPError | None = None
-    for attempt in range(2):
-        try:
-            with opener(req, timeout=timeout) as resp:
-                data = json.loads(resp.read().decode("utf-8"))
-            return data if isinstance(data, dict) else {}
-        except HTTPError as exc:
-            last_error = exc
-            # Retry only on 5xx server hiccups; 4xx (including 401/403 auth failures and
-            # 429 rate limits) is reported as-is.
-            if exc.code not in {500, 502, 503, 504} or attempt == 1:
-                raise
-            time.sleep(0.2)
-    assert last_error is not None
-    raise last_error
-
-
 def collect_moonshot_api_snapshots(
     *,
     opener=urllib.request.urlopen,
@@ -70,8 +50,8 @@ def collect_moonshot_api_snapshots(
     headers = {"Authorization": f"Bearer {key}", "Accept": "application/json"}
 
     try:
-        balance_payload = _get_json(MOONSHOT_BALANCE_URL, headers, opener, timeout)
-        models_payload = _get_json(MOONSHOT_MODELS_URL, headers, opener, timeout)
+        balance_payload = get_json(MOONSHOT_BALANCE_URL, headers, opener, timeout)
+        models_payload = get_json(MOONSHOT_MODELS_URL, headers, opener, timeout)
     except HTTPError as exc:
         status = "stale_token" if exc.code in {401, 403} else "fetch_error"
         return [_status_snapshot(status, captured_at, {"error": f"HTTP {exc.code}: {exc.reason}"})]
