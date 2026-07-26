@@ -243,14 +243,22 @@ def test_pi_agent_parser_model_from_model_change(monkeypatch, tmp_path):
 
 
 def test_pi_agent_parser_default_dir(monkeypatch, tmp_path):
-    """Without PI_AGENT_DIR, defaults to ~/.pi/agent/sessions."""
+    """Without PI_AGENT_DIR, defaults to ~/.omp/agent/sessions then ~/.pi/agent/sessions.
+
+    Oh My Pi is the current default for this stack (see commit 7fe1e09 in git
+    history; applied here as part of unblocking omp usage from being invisible
+    in the kdash TOOLS section).
+    """
     monkeypatch.delenv("PI_AGENT_DIR", raising=False)
     monkeypatch.setattr(Path, "home", lambda: tmp_path)
     _sig_cache.clear()
     BaseParser._entry_cache.clear()
 
     parser = PiAgentParser(PricingDatabase())
-    assert parser.search_dirs == [tmp_path / ".pi" / "agent" / "sessions"]
+    assert parser.search_dirs == [
+        tmp_path / ".omp" / "agent" / "sessions",
+        tmp_path / ".pi" / "agent" / "sessions",
+    ]
     # No files → empty result without error
     entries = parser.collect(None, None)
     assert entries == []

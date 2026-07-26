@@ -144,11 +144,30 @@ def kimi_roots() -> List[Path]:
 
 
 def pi_agent_search_dirs() -> List[Path]:
-    """``$PI_AGENT_DIR`` (comma-separated) if set, else ``~/.pi/agent/sessions``."""
+    """Session roots for Pi-family agents (upstream Pi + Oh My Pi / omp).
+
+    ``$PI_AGENT_DIR`` (comma-separated) overrides everything when set.
+    Otherwise scan both:
+      - ``~/.omp/agent/sessions`` — Oh My Pi (omp) default (current stack)
+      - ``~/.pi/agent/sessions``  — upstream Pi / legacy
+
+    Dedupes paths while preserving order. Callers rglob ``*.jsonl``.
+    """
     pi_dir_env = os.environ.get("PI_AGENT_DIR", "").strip()
     if pi_dir_env:
         return [Path(d.strip()).expanduser() for d in pi_dir_env.split(",") if d.strip()]
-    return [Path.home() / ".pi" / "agent" / "sessions"]
+    candidates = [
+        Path.home() / ".omp" / "agent" / "sessions",
+        Path.home() / ".pi" / "agent" / "sessions",
+    ]
+    seen: set = set()
+    out: List[Path] = []
+    for p in candidates:
+        key = str(p)
+        if key not in seen:
+            seen.add(key)
+            out.append(p)
+    return out
 
 
 # --- GitHub Copilot CLI -----------------------------------------------------------
