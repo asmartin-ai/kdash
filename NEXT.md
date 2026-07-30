@@ -47,17 +47,20 @@ claude/zai/codex API replaced with omp.*
    - **Phase 4** (DONE 2026-07-29): 7 pure-leaf TS modules ported to
      `kdash-ts/` with byte-identical differential tests. 127→129 tests.
      G1 resolved: fork accepted. Commit `a06796e` (+ `adb9320` cleanup).
-   - **Phase 5** (10/11 functional): Codex, Gemini, Antigravity, Kimi,
-     PiAgent, Copilot, Hermes, and Mimo now have differential TS ports.
-     PiAgent matches 18,549 real entries; seven locally absent corpora pass
-     non-empty isolated fixtures. Amp remains blocked because Python is an
-     explicit no-op placeholder and no local Amp schema/corpus exists.
+   - **Phase 5** (DONE, 11/11 functional): Codex, Gemini, Antigravity, Amp,
+     Kimi, PiAgent, Copilot, Hermes, and Mimo have differential TS ports.
+     PiAgent matches 18,549 real entries; locally absent corpora pass non-empty
+     isolated fixtures rather than vacuous empty-array checks. Amp reads
+     explicit `amp threads export` JSON from `~/.amp/exports` or
+     `TOKDASH_AMP_EXPORT_DIR`; its fixture follows the verified public export
+     schema and covers PowerShell UTF-8 BOM output.
    - **Phase 6 runtime parity** (DONE locally 2026-07-30): `kdash-ts` owns
      quota collection, `bun:sqlite` storage, compute/stats/OpenClaw
      orchestration, scored suggestions, session list/detail, stack/update,
      Bun CLI/server, static assets, and the complete dashboard API matrix.
-     Full TS gate: **176 pass, 0 fail**. Browser cutover now waits on Amp's
-     missing stable schema/differential reference rather than runtime routes.
+     Full TS gate: **179 pass, 0 fail**. Python retirement now waits on
+     representative real-corpus parity, browser cutover verification, and
+     explicit deletion approval.
 
 ## Icebox
 - **PR to upstream tokdash**: suggest reusing oh-my-pi's `omp usage --json`

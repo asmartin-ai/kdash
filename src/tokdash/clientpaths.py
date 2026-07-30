@@ -111,6 +111,22 @@ def amp_root() -> Path:
     return Path.home() / ".amp"
 
 
+def amp_export_dirs() -> List[Path]:
+    """Amp ``threads export`` JSON roots.
+
+    ``TOKDASH_AMP_EXPORT_DIR`` accepts a comma-separated list. When unset,
+    Tokdash reads ``~/.amp/exports`` but never creates or writes it.
+    """
+    explicit = os.environ.get("TOKDASH_AMP_EXPORT_DIR", "").strip()
+    if explicit:
+        return [
+            Path(value.strip()).expanduser()
+            for value in explicit.split(",")
+            if value.strip()
+        ]
+    return [amp_root() / "exports"]
+
+
 # --- Kimi CLI ---------------------------------------------------------------
 
 

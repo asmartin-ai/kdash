@@ -70,3 +70,22 @@
   diagnostics were clean for core, parsers, quota, server, and CLI.
 - No push, PR, publication, deployment, Python retirement, or shared/global
   configuration mutation was performed.
+
+## Amp completion — 2026-07-30
+- Inspected the published Amp CLI package and official Amp docs. The CLI exposes
+  `amp threads export <thread>` as JSON; no stable default local thread database
+  exists, so the implementation uses an explicit snapshot boundary.
+- Verified the exported payload shape against a public Amp thread: thread
+  metadata, ordered messages, assistant `usage`, model, input/output, cache-read,
+  and cache-creation token fields.
+- Added `clientpaths.amp_export_dirs()` / `ampExportDirs()`, defaulting to
+  `~/.amp/exports` with `TOKDASH_AMP_EXPORT_DIR` override.
+- Replaced Python's Amp placeholder with a fail-soft export parser and added the
+  equivalent TypeScript parser plus tracker registration.
+- Added real-corpus and non-empty fixture differential coverage. The fixture
+  uses the verified export shape and a PowerShell-style UTF-8 BOM.
+- Verification: targeted Amp differential 2 pass, 0 fail; final Bun gate
+  179 pass, 0 fail, 38,880 assertions; Python suite 694 pass, 7 skipped; LSP
+  diagnostics clean for changed TypeScript sources and tests.
+- No Amp API request, login, push, PR, deployment, Python retirement, deletion,
+  or shared/global configuration mutation was performed.

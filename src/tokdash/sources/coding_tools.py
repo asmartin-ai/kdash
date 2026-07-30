@@ -1025,20 +1025,226 @@ class AntigravityCLIParser(BaseParser):
 
 
 class AmpParser(BaseParser):
+    """Parse JSON produced by ``amp threads export``.
+
+    Amp stores threads remotely rather than in a stable local database. Tokdash
+    therefore reads explicit exports from ``TOKDASH_AMP_EXPORT_DIR`` (or the
+    read-only default ``~/.amp/exports``). Export with:
+
+        amp threads export <thread-id> > ~/.amp/exports/<thread-id>.json
+    """
+
     source_name = "amp"
     sync_capability = SourceSyncCapability(
-        mode="source_replace",
-        reason="Parser placeholder returns no rows until a stable local schema is available.",
+        mode="file_replace",
+        reason="Amp thread exports are immutable JSON snapshots parsed per file.",
     )
 
     def __init__(self, pricing_db: PricingDatabase):
         super().__init__(pricing_db)
-        self.amp_root = clientpaths.amp_root()
+        self.export_dirs = clientpaths.amp_export_dirs()
+
+    def _file_signatures(self) -> tuple:
+        def scan() -> tuple:
+            by_path: Dict[str, Tuple[str, int, int]] = {}
+            for root in self.export_dirs:
+                if not root.exists():
+                    continue
+                for pattern in ("*.json", "*.jsonl"):
+                    for path in root.rglob(pattern):
+                        try:
+                            stat = path.stat()
+                            by_path[str(path)] = (
+                                str(path),
+                                int(stat.st_mtime_ns),
+                                int(stat.st_size),
+                            )
+                        except (FileNotFoundError, OSError):
+                            continue
+            return tuple(sorted(by_path.values()))
+
+        roots = ",".join(str(root) for root in self.export_dirs)
+        return _timed_sigs(f"amp:{roots}", scan)
+
+    @staticmethod
+    def _object(value: Any) -> Dict[str, Any]:
+        return value if isinstance(value, dict) else {}
+
+    @classmethod
+    def _thread_payloads(cls, value: Any) -> List[Dict[str, Any]]:
+        if isinstance(value, list):
+            out: List[Dict[str, Any]] = []
+            for item in value:
+                out.extend(cls._thread_payloads(item))
+            return out
+        if not isinstance(value, dict):
+            return []
+        if isinstance(value.get("messages"), list):
+            return [value]
+        thread = value.get("thread")
+        if isinstance(thread, dict):
+            return cls._thread_payloads(thread)
+        data = value.get("data")
+        if isinstance(data, dict) and isinstance(data.get("thread"), dict):
+            return cls._thread_payloads(data["thread"])
+        return []
+
+    @staticmethod
+    def _timestamp_ms(value: Any) -> int:
+        if isinstance(value, (int, float)):
+            numeric = float(value)
+            if not numeric:
+                return 0
+            return int(numeric * 1000 if abs(numeric) < 100_000_000_000 else numeric)
+        if not isinstance(value, str) or not value.strip():
+            return 0
+        text = value.strip()
+        try:
+            parsed = datetime.fromisoformat(text.replace("Z", "+00:00"))
+            if parsed.tzinfo is None:
+                parsed = parsed.replace(tzinfo=timezone.utc)
+            return int(parsed.timestamp() * 1000)
+        except (TypeError, ValueError, OverflowError):
+            return 0
+
+    @staticmethod
+    def _fallback_model(thread: Dict[str, Any]) -> str:
+        env = AmpParser._object(thread.get("env"))
+        initial = AmpParser._object(env.get("initial"))
+        tags = initial.get("tags")
+        if isinstance(tags, list):
+            for tag in tags:
+                if isinstance(tag, str) and tag.startswith("model:"):
+                    return tag.removeprefix("model:") or "unknown"
+        return "unknown"
+
+    @staticmethod
+    def _provider(model: str) -> str:
+        lowered = model.strip().lower()
+        if lowered.startswith("claude"):
+            return "anthropic"
+        if lowered.startswith(("gpt-", "codex", "o1", "o3", "o4")):
+            return "openai"
+        if lowered.startswith("gemini"):
+            return "google"
+        if lowered.startswith("grok"):
+            return "xai"
+        if lowered.startswith("kimi"):
+            return "moonshotai"
+        return lowered.split("/", 1)[0] if "/" in lowered else ""
+
+    @staticmethod
+    def _usage_int(usage: Dict[str, Any], camel: str, snake: str) -> int:
+        return BaseParser._i(usage.get(camel, usage.get(snake)))
+
+    def _entries_from_thread(
+        self,
+        thread: Dict[str, Any],
+        fallback_timestamp: int,
+        seen: set[str],
+    ) -> List[Dict[str, Any]]:
+        messages = thread.get("messages")
+        if not isinstance(messages, list):
+            return []
+        thread_id = str(thread.get("id") or "unknown")
+        fallback_model = self._fallback_model(thread)
+        current_timestamp = self._timestamp_ms(thread.get("created")) or fallback_timestamp
+        out: List[Dict[str, Any]] = []
+        for index, message_value in enumerate(messages):
+            if not isinstance(message_value, dict):
+                continue
+            meta = self._object(message_value.get("meta"))
+            message_timestamp = (
+                self._timestamp_ms(message_value.get("createdAt"))
+                or self._timestamp_ms(meta.get("sentAt"))
+            )
+            if message_timestamp:
+                current_timestamp = message_timestamp
+            if message_value.get("role") != "assistant":
+                continue
+            usage = self._object(message_value.get("usage"))
+            if not usage:
+                continue
+            timestamp = (
+                self._timestamp_ms(usage.get("timestamp"))
+                or message_timestamp
+                or current_timestamp
+                or fallback_timestamp
+            )
+            model = str(usage.get("model") or fallback_model or "unknown")
+            input_tokens = self._usage_int(usage, "inputTokens", "input_tokens")
+            output_tokens = self._usage_int(usage, "outputTokens", "output_tokens")
+            cache_read = self._usage_int(
+                usage, "cacheReadInputTokens", "cache_read_input_tokens"
+            )
+            cache_write = self._usage_int(
+                usage, "cacheCreationInputTokens", "cache_creation_input_tokens"
+            )
+            if input_tokens + output_tokens + cache_read + cache_write <= 0:
+                continue
+            message_id = str(
+                message_value.get("messageId")
+                or message_value.get("id")
+                or index
+            )
+            entry_id = f"amp:{thread_id}:{message_id}"
+            if entry_id in seen:
+                continue
+            seen.add(entry_id)
+            out.append(
+                {
+                    "source": self.source_name,
+                    "model": model,
+                    "provider": self._provider(model),
+                    "input": input_tokens,
+                    "output": output_tokens,
+                    "cacheRead": cache_read,
+                    "cacheWrite": cache_write,
+                    "reasoning": 0,
+                    "cost": self.pricing_db.get_cost(
+                        model,
+                        input_tokens,
+                        output_tokens,
+                        cache_read,
+                        cache_write,
+                    ),
+                    "timestamp": int(timestamp),
+                    "entry_id": entry_id,
+                }
+            )
+        return out
+
+    @staticmethod
+    def _json_values(path: Path) -> List[Any]:
+        try:
+            text = path.read_text(encoding="utf-8-sig")
+        except (OSError, UnicodeDecodeError):
+            return []
+        try:
+            return [json.loads(text)]
+        except (TypeError, ValueError):
+            out: List[Any] = []
+            for line in text.splitlines():
+                if not line.strip():
+                    continue
+                try:
+                    out.append(json.loads(line))
+                except (TypeError, ValueError):
+                    continue
+            return out
 
     def _parse_all(self) -> List[Dict[str, Any]]:
-        # TODO(coding_tools): Amp parser placeholder.
-        # Keep fail-soft until we have schema + fixtures.
-        return []
+        out: List[Dict[str, Any]] = []
+        seen: set[str] = set()
+        for path_str, mtime_ns, _ in self._file_signatures():
+            path = Path(path_str)
+            fallback_timestamp = int(mtime_ns // 1_000_000)
+            for value in self._json_values(path):
+                for thread in self._thread_payloads(value):
+                    out.extend(
+                        self._entries_from_thread(thread, fallback_timestamp, seen)
+                    )
+        return sorted(out, key=lambda entry: (entry["timestamp"], entry["entry_id"]))
 
 
 class KimiParser(BaseParser):

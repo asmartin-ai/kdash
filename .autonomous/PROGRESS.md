@@ -46,6 +46,15 @@
 - Final gate: `bun test` reported 176 pass, 0 fail, 38,876 assertions. Targeted
   LSP diagnostics reported no issues across core, parser, quota, server, and
   CLI sources.
-- Cutover remains blocked only by Amp's missing stable local schema/reference.
-  Official Amp documentation confirms its stream-JSON usage schema but not a
-  default local thread store that the parser can collect.
+- Resolved Amp without hidden network access: official CLI package code confirms
+  `amp threads export` as the stable local snapshot boundary, while a public
+  Amp thread exposed the exported thread/message/usage payload shape.
+- Implemented the Python reference and TypeScript `AmpParser`, including JSON,
+  NDJSON, wrapper payloads, deterministic deduplication, pricing, and UTF-8 BOM
+  handling. The parser reads only explicit export directories.
+- Amp fixture differential: 2 pass, 0 fail. Final gate: `bun test` reported
+  179 pass, 0 fail, 38,880 assertions. Python reference gate remained
+  694 pass, 7 skipped.
+- All Phase 5 and Phase 6 deliverables are now implemented. Phase 7 remains
+  deferred pending representative real-corpus parity, browser cutover
+  verification, and explicit deletion approval.
