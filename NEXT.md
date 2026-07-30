@@ -34,23 +34,25 @@ claude/zai/codex API replaced with omp.*
 2. **Kill browser auto-open** (the wrapper opens a tab every time `kdash`
    is called — see `~/bin/kdash` self-heal logic). Options in the
    investigation from 2026-07-21.
-3. **TypeScript migration — Phases 1–3 DONE 2026-07-28/29** (plan:
+3. **TypeScript migration — Phases 1–5 in progress** (plan:
    `docs/TS-Rewrite-Plan-2026-07-28.md`).
-   - **Phase 1** (DONE): ported the prototype's `scoreModel`/`recommend`/
-     `freePoolView`/`runwayDays`/`alerts` into `src/tokdash/suggest.py` as an
-     **additive** layer — `build_suggest` and its existing contract untouched.
-     New keys on `/api/suggest`: `recommendations`, `free_pool`, `alerts`,
-     `scored_models`; plus `?tier=` filter. 41 new tests.
-   - **Phase 2** (DONE): added 3 new dashboard tabs — Subscriptions, APIs,
-     Models — rendered from existing `/api/quota` + `/api/suggest` (no new
-     endpoints). All labels use `data-i18n` (en+zh); all colours use
-     `var(--color-*)`; PWA untouched (single-shell cache). 8 tabs live,
-     browser-verified: tabs switch, i18n toggles to Chinese, theme toggles.
-   - **Phase 3** (DONE): shipped `K:/Projects/llm-stack/kdash-tui/` — a
-     dependency-free htop-style TUI polling the live API. 4 screens
-     (Overview/Subscriptions/APIs/Models). `bun build --compile` → single
-     binary; cold-start ~82ms (vs Python CLI ~390ms).
-   **Next:** Phase 4 is gated on G1 (permanent upstream fork) — see below.
+   - **Phase 1** (DONE 2026-07-28): scoring layer additive to `suggest.py`.
+     `recommendations`/`free_pool`/`alerts`/`scored_models` + `?tier=` filter.
+     41 new tests. Commit `8a722d0`.
+   - **Phase 2** (DONE 2026-07-28): 3 new dashboard tabs (Subscriptions, APIs,
+     Models) from existing `/api/quota` + `/api/suggest`. i18n en+zh, CSS vars.
+     Commit `8a722d0`.
+   - **Phase 3** (DONE 2026-07-29): `kdash-tui` shipped to its own repo
+     (`c486ebb`). 4 screens, `bun build --compile`, cold-start ~82ms.
+   - **Phase 4** (DONE 2026-07-29): 7 pure-leaf TS modules ported to
+     `kdash-ts/` with byte-identical differential tests. 127→129 tests.
+     G1 resolved: fork accepted. Commit `a06796e` (+ `adb9320` cleanup).
+   - **Phase 5** (IN PROGRESS 2026-07-29): parser port. OpenCode + Claude
+     parsers done (byte-identical on real corpus: 155 + 3698 entries).
+     Remaining: Codex, Gemini, Antigravity, Amp, Kimi, PiAgent (18,249
+     entries — highest value), Copilot, Hermes, Mimo.
+   **Next:** finish Phase 5 parsers → Phase 6 (quota+store on bun:sqlite)
+   → Phase 7 (cutover).
 
 ## Icebox
 - **PR to upstream tokdash**: suggest reusing oh-my-pi's `omp usage --json`
