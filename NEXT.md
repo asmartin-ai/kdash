@@ -34,7 +34,7 @@ claude/zai/codex API replaced with omp.*
 2. **Kill browser auto-open** (the wrapper opens a tab every time `kdash`
    is called — see `~/bin/kdash` self-heal logic). Options in the
    investigation from 2026-07-21.
-3. **TypeScript migration — Phases 1–5 in progress** (plan:
+3. **TypeScript migration — Phase 6 runtime parity complete** (plan:
    `docs/TS-Rewrite-Plan-2026-07-28.md`).
    - **Phase 1** (DONE 2026-07-28): scoring layer additive to `suggest.py`.
      `recommendations`/`free_pool`/`alerts`/`scored_models` + `?tier=` filter.
@@ -47,12 +47,17 @@ claude/zai/codex API replaced with omp.*
    - **Phase 4** (DONE 2026-07-29): 7 pure-leaf TS modules ported to
      `kdash-ts/` with byte-identical differential tests. 127→129 tests.
      G1 resolved: fork accepted. Commit `a06796e` (+ `adb9320` cleanup).
-   - **Phase 5** (IN PROGRESS 2026-07-29): parser port. OpenCode + Claude
-     parsers done (byte-identical on real corpus: 155 + 3698 entries).
-     Remaining: Codex, Gemini, Antigravity, Amp, Kimi, PiAgent (18,249
-     entries — highest value), Copilot, Hermes, Mimo.
-   **Next:** finish Phase 5 parsers → Phase 6 (quota+store on bun:sqlite)
-   → Phase 7 (cutover).
+   - **Phase 5** (10/11 functional): Codex, Gemini, Antigravity, Kimi,
+     PiAgent, Copilot, Hermes, and Mimo now have differential TS ports.
+     PiAgent matches 18,549 real entries; seven locally absent corpora pass
+     non-empty isolated fixtures. Amp remains blocked because Python is an
+     explicit no-op placeholder and no local Amp schema/corpus exists.
+   - **Phase 6 runtime parity** (DONE locally 2026-07-30): `kdash-ts` owns
+     quota collection, `bun:sqlite` storage, compute/stats/OpenClaw
+     orchestration, scored suggestions, session list/detail, stack/update,
+     Bun CLI/server, static assets, and the complete dashboard API matrix.
+     Full TS gate: **176 pass, 0 fail**. Browser cutover now waits on Amp's
+     missing stable schema/differential reference rather than runtime routes.
 
 ## Icebox
 - **PR to upstream tokdash**: suggest reusing oh-my-pi's `omp usage --json`
