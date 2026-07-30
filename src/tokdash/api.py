@@ -990,7 +990,7 @@ def refresh_quota() -> Dict[str, Any]:
 
 
 @app.get("/api/suggest")
-def get_suggest(refresh: bool = False) -> Dict[str, Any]:
+def get_suggest(refresh: bool = False, tier: Optional[str] = None) -> Dict[str, Any]:
     """Plan → model suggestions (Starter / free / trial routing).
 
     Policy table from ``tokdash.suggest``. Shaped by local Claude quota peaks
@@ -999,6 +999,9 @@ def get_suggest(refresh: bool = False) -> Dict[str, Any]:
     Query:
       ``refresh=1`` / ``refresh=true`` — skip the 600s route cache and recompute
       (used by the dashboard Reload button). Read-only; no writes.
+      ``tier=T1|T2|T3|VISION`` — filter the prototype ``recommendations`` list
+      to a single tier (uppercased; FREE returns an empty list, matching the
+      prototype contract — free models surface via ``free_pool``).
     """
 
     def fetch() -> Dict[str, Any]:
@@ -1064,7 +1067,7 @@ def get_suggest(refresh: bool = False) -> Dict[str, Any]:
         except Exception:
             pass
 
-        return build_suggest(
+        payload = build_suggest(
             zenmux_peak_pct=zenmux_peak,
             claude_peak_pct=claude_peak,
             clinepass_peak_pct=cline_peak,
@@ -1077,6 +1080,48 @@ def get_suggest(refresh: bool = False) -> Dict[str, Any]:
             zenmux_max7=zenmux_max7,
         )
 
+        # Prototype scoring layer (Phase 1, additive). Joins the curated model
+        # registry to the same live quota_state() consumed above and to the
+        # pricing singleton; merges recommendations / free_pool / alerts onto
+        # the existing payload. Existing keys (pick/fallbacks/tiers/...) are
+        # untouched. See suggest.build_scored_state for the per-field provenance
+        # and honest-gap notes (latency/error_rate/spend_24h not yet tracked).
+        try:
+            from .suggest import build_scored_state
+
+            # Reuse the quota_state() already obtained above when possible; fall
+            # back to a fresh call (returns {} on any failure) so the scorer
+            # never breaks the route.
+            try:
+                q_for_score = q  # type: ignore[name-defined]
+            except NameError:
+                try:
+                    from .sources.quota import quota_state as _qs
+
+                    q_for_score = _qs() or {}
+                except Exception:
+                    q_for_score = {}
+            pricing_db = None
+            try:
+                from .sessions import _PRICING_DB
+
+                pricing_db = _PRICING_DB
+            except Exception:
+                pricing_db = None
+            scored = build_scored_state(q_for_score, pricing_db=pricing_db)
+            payload["recommendations"] = scored["recommendations"]
+            payload["free_pool"] = scored["free_pool"]
+            payload["alerts"] = scored["alerts"]
+            payload["scored_models"] = scored["scored_models"]
+        except Exception:
+            # Scoring is additive; never let it break the core suggest contract.
+            payload.setdefault("recommendations", [])
+            payload.setdefault("free_pool", {"concurrency": 0, "advice": ""})
+            payload.setdefault("alerts", [])
+            payload.setdefault("scored_models", [])
+
+        return payload
+
     # 10-minute response cache: the suggest payload is purely a function of the
     # current quota state, which is already cached/quota_state has its own
     # 30 s default). 600 s is the upper bound on how stale the dashboard is
@@ -1084,12 +1129,22 @@ def get_suggest(refresh: bool = False) -> Dict[str, Any]:
     if not refresh:
         cached = _suggest_cache_get()
         if cached is not None:
-            return cached
-    payload = fetch()
-    if refresh:
-        _suggest_cache_set(payload)
+            payload = cached
+        else:
+            payload = fetch()
+            _suggest_cache_set(payload)
     else:
+        payload = fetch()
         _suggest_cache_set(payload)
+
+    # Apply the optional ?tier= filter to recommendations (cheap post-step; the
+    # cache holds the full set so different tier values share one entry).
+    if tier:
+        want = tier.strip().upper()
+        recs = payload.get("recommendations")
+        if isinstance(recs, list):
+            payload = dict(payload)
+            payload["recommendations"] = [r for r in recs if str(r.get("tier")) == want]
     return payload
 
 

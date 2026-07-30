@@ -929,6 +929,9 @@
         <button class="tab-btn" data-tab="stats" aria-selected="false" data-i18n="stats">Stats</button>
         <button class="tab-btn" data-tab="quota" aria-selected="false" data-i18n="quota">Quota</button>
         <button class="tab-btn" data-tab="pricing" aria-selected="false" data-i18n="pricingDb">Pricing</button>
+        <button class="tab-btn" data-tab="subscriptions" aria-selected="false" data-i18n="subscriptions">Subscriptions</button>
+        <button class="tab-btn" data-tab="apis" aria-selected="false" data-i18n="apis">APIs</button>
+        <button class="tab-btn" data-tab="models" aria-selected="false" data-i18n="models">Models</button>
       </nav>
     </header>
 
@@ -1787,6 +1790,56 @@
       </section>
     </div>
 
+    <!-- Subscriptions Tab -->
+    <div id="subscriptions-content" class="tab-content">
+      <section class="surface p-5 mb-6">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
+          <div>
+            <h2 class="text-base font-extrabold mono" data-i18n="subscriptionsHeading">Subscriptions</h2>
+            <div class="text-xs mt-1" style="color: var(--color-muted);" data-i18n="subscriptionsSub">Plan quota and reset windows per provider</div>
+          </div>
+        </div>
+        <div id="subscriptionsCards" class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div class="text-center py-10" style="color: var(--color-muted);" data-i18n="loading">Loading…</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- APIs Tab -->
+    <div id="apis-content" class="tab-content">
+      <section class="surface p-5 mb-6">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
+          <div>
+            <h2 class="text-base font-extrabold mono" data-i18n="apisHeading">API Accounts</h2>
+            <div class="text-xs mt-1" style="color: var(--color-muted);" data-i18n="apisSub">Balances, health and runway for paid endpoints</div>
+          </div>
+        </div>
+        <div id="apisCards" class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+          <div class="text-center py-10" style="color: var(--color-muted);" data-i18n="loading">Loading…</div>
+        </div>
+      </section>
+    </div>
+
+    <!-- Models Tab -->
+    <div id="models-content" class="tab-content">
+      <section class="surface p-5 mb-6">
+        <div class="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4 mb-5">
+          <div>
+            <h2 class="text-base font-extrabold mono" data-i18n="modelsHeading">Model Recommendations</h2>
+            <div class="text-xs mt-1" style="color: var(--color-muted);" data-i18n="modelsSub">Scored picks and free-pool concurrency from /api/suggest</div>
+          </div>
+        </div>
+        <div id="modelsFreePool" class="mb-5"></div>
+        <div id="modelsRecommendations" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+          <div class="text-center py-10" style="color: var(--color-muted);" data-i18n="loading">Loading…</div>
+        </div>
+      </section>
+      <section class="surface p-5">
+        <h3 class="text-base font-extrabold mono mb-4" data-i18n="scoredModels">Scored models</h3>
+        <div id="modelsScoredTable" class="overflow-x-auto"></div>
+      </section>
+    </div>
+
   </div>
 
   <div id="sessionModal" class="hidden fixed inset-0 z-50">
@@ -2027,6 +2080,35 @@
         stats: 'Stats',
         quota: 'Quota',
         pricingDb: 'Pricing',
+        subscriptions: 'Subscriptions',
+        apis: 'APIs',
+        models: 'Models',
+        subscriptionsHeading: 'Subscriptions',
+        subscriptionsSub: 'Plan quota and reset windows per provider',
+        apisHeading: 'API Accounts',
+        apisSub: 'Balances, health and runway for paid endpoints',
+        modelsHeading: 'Model Recommendations',
+        modelsSub: 'Scored picks and free-pool concurrency from /api/suggest',
+        tier: 'Tier',
+        plan: 'Plan',
+        status: 'Status',
+        balance: 'Balance',
+        health: 'Health',
+        provider: 'Provider',
+        window: 'Window',
+        resetsIn: 'Resets in',
+        noPlan: 'no plan',
+        noData: 'no data',
+        pick: 'Pick',
+        preferred: 'Preferred',
+        fallbacks: 'Fallbacks',
+        reason: 'Reason',
+        freePoolAdvice: 'Free-pool advice',
+        concurrency: 'Concurrency',
+        scoredModels: 'Scored models',
+        score: 'Score',
+        available: 'Available',
+        source: 'Source',
         subscriptionQuota: 'Subscription Quota',
         utilizationHistory: 'Usage History',
         consumptionHistory: 'Consumption History',
@@ -2259,6 +2341,35 @@
         stats: '统计',
         quota: '额度',
         pricingDb: '价格库',
+        subscriptions: '订阅',
+        apis: 'API',
+        models: '模型',
+        subscriptionsHeading: '订阅',
+        subscriptionsSub: '各供应商的套餐额度与重置窗口',
+        apisHeading: 'API 账户',
+        apisSub: '付费端点的余额、健康度与续航',
+        modelsHeading: '模型推荐',
+        modelsSub: '来自 /api/suggest 的评分选择与免费池并发',
+        tier: '层级',
+        plan: '套餐',
+        status: '状态',
+        balance: '余额',
+        health: '健康',
+        provider: '供应商',
+        window: '窗口',
+        resetsIn: '重置剩余',
+        noPlan: '无套餐',
+        noData: '无数据',
+        pick: '推荐',
+        preferred: '首选',
+        fallbacks: '备选',
+        reason: '原因',
+        freePoolAdvice: '免费池建议',
+        concurrency: '并发',
+        scoredModels: '评分模型',
+        score: '分数',
+        available: '可用',
+        source: '来源',
         subscriptionQuota: '订阅额度',
         utilizationHistory: '剩余额度历史',
         consumptionHistory: '消耗历史',
@@ -2464,6 +2575,21 @@
 
     function isPricingActive() {
       const el = document.getElementById('pricing-content');
+      return !!el && el.classList.contains('active');
+    }
+
+    function isSubscriptionsActive() {
+      const el = document.getElementById('subscriptions-content');
+      return !!el && el.classList.contains('active');
+    }
+
+    function isApisActive() {
+      const el = document.getElementById('apis-content');
+      return !!el && el.classList.contains('active');
+    }
+
+    function isModelsActive() {
+      const el = document.getElementById('models-content');
       return !!el && el.classList.contains('active');
     }
 
@@ -2975,6 +3101,10 @@
       updateTimestamp();
       updateMetricControls();
       syncDatePickerFooter();
+      // Phase 2 tabs: re-derive imperative text from cached payloads on lang switch.
+      if (lastSubscriptionsPayload) renderSubscriptionsCards(lastSubscriptionsPayload);
+      if (lastApisPayload) renderApisCards(lastApisPayload);
+      if (lastModelsPayload) renderModels(lastModelsPayload);
     }
 
     function rerenderPresentation() {
@@ -5524,6 +5654,428 @@
       }
     }
 
+    // =========================================================================
+    // Phase 2 tabs: Subscriptions / APIs / Models.
+    //
+    // All three render from existing endpoints (/api/quota and /api/suggest) —
+    // no new backend surface. They are read-only display tabs (like Pricing),
+    // so they do NOT hook the global refresh button or auto-refresh interval.
+    // Every visible string uses t() or data-i18n; every colour uses a
+    // var(--color-*) token or the established quotaUsedColor() hex convention.
+    // =========================================================================
+
+    let lastSubscriptionsPayload = null;
+    let lastApisPayload = null;
+    let lastModelsPayload = null;
+    let subscriptionsLoaded = false;
+    let apisLoaded = false;
+    let modelsLoaded = false;
+
+    // Provider blocks with a recognizable plan/subscription signal. Agnes/IAMHC
+    // are free serial lanes (no plan), ZenMux/ClinePass/Codex/Claude/Zai are
+    // subscriptions. This is the same provider universe as /api/quota.
+    const SUBSCRIPTION_PROVIDERS = ['zenmux', 'clinepass', 'codex', 'claude', 'zai', 'qwencloud'];
+    const API_PROVIDERS = ['deepseek', 'moonshot', 'openrouter', 'fireworks', 'qwencloud'];
+
+    function healthColor(health) {
+      const h = String(health || '').toLowerCase();
+      if (h === 'ok') return 'var(--color-cost)';
+      if (h === 'down' || h === 'unavailable') return '#DC2626';
+      return '#D97706'; // degraded / unknown
+    }
+
+    function statusColor(status) {
+      const s = String(status || '').toLowerCase();
+      if (s === 'ok') return 'var(--color-cost)';
+      if (s === 'unavailable' || s === 'error' || s === 'disabled') return '#DC2626';
+      if (s === 'stale' || s === 'estimated') return '#D97706';
+      return 'var(--color-muted)';
+    }
+
+    function emptyCard(messageKey) {
+      const el = document.createElement('div');
+      el.className = 'surface p-8 text-center lg:col-span-3';
+      el.style.color = 'var(--color-muted)';
+      el.setAttribute('data-i18n', messageKey);
+      el.textContent = t(messageKey);
+      return el;
+    }
+
+    function makeBucketBar(usedPercent) {
+      const used = usedPercent === null || usedPercent === undefined ? null : Number(usedPercent);
+      const bar = document.createElement('div');
+      bar.className = 'h-2 rounded-full overflow-hidden';
+      bar.style.background = 'color-mix(in srgb, var(--color-text) 10%, transparent)';
+      const fill = document.createElement('div');
+      fill.className = 'h-full rounded-full';
+      fill.style.width = `${used === null ? 0 : Math.max(0, Math.min(100, used))}%`;
+      fill.style.background = used === null ? 'var(--color-primary)' : quotaUsedColor(used);
+      bar.appendChild(fill);
+      return bar;
+    }
+
+    async function loadSubscriptions() {
+      try {
+        const payload = await fetchJsonWithRetry(appPath('/api/quota'));
+        lastSubscriptionsPayload = payload;
+        subscriptionsLoaded = true;
+        renderSubscriptionsCards(payload);
+      } catch (error) {
+        console.error('Error loading subscriptions:', error);
+        if (lastSubscriptionsPayload) renderSubscriptionsCards(lastSubscriptionsPayload);
+      }
+    }
+
+    function renderSubscriptionsCards(payload) {
+      const container = document.getElementById('subscriptionsCards');
+      if (!container) return;
+      const providers = (payload && payload.providers) || {};
+      const frag = document.createDocumentFragment();
+      const subs = SUBSCRIPTION_PROVIDERS
+        .map((name) => ({ name, block: providers[name] }))
+        .filter((entry) => entry.block && (entry.block.plan || (entry.block.buckets && entry.block.buckets.length)));
+
+      if (!subs.length) {
+        container.replaceChildren(emptyCard('noData'));
+        return;
+      }
+
+      for (const { name, block } of subs) {
+        const card = document.createElement('div');
+        card.className = 'surface p-5';
+
+        const title = document.createElement('div');
+        title.className = 'flex items-center justify-between mb-3';
+        const titleText = document.createElement('span');
+        titleText.className = 'text-base font-extrabold mono';
+        titleText.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+        const planBadge = document.createElement('span');
+        planBadge.className = 'text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded';
+        planBadge.style.background = 'color-mix(in srgb, var(--color-primary) 15%, transparent)';
+        planBadge.style.color = 'var(--color-primary)';
+        planBadge.textContent = block.plan || t('noPlan');
+        title.appendChild(titleText);
+        title.appendChild(planBadge);
+        card.appendChild(title);
+
+        const buckets = (block.buckets || []).filter(
+          (b) => b && b.bucket !== 'api' && b.bucket !== 'reset_credits' && b.used_percent !== null && b.used_percent !== undefined
+        );
+        if (!buckets.length) {
+          const empty = document.createElement('div');
+          empty.className = 'text-xs';
+          empty.style.color = 'var(--color-muted)';
+          empty.textContent = t('noData');
+          card.appendChild(empty);
+        } else {
+          for (const b of buckets) {
+            const row = document.createElement('div');
+            row.className = 'mb-3';
+            const labelRow = document.createElement('div');
+            labelRow.className = 'flex items-center justify-between text-xs mb-1';
+            const label = document.createElement('span');
+            label.style.color = 'var(--color-muted)';
+            label.textContent = b.bucket_label || b.bucket || '';
+            const pct = document.createElement('span');
+            pct.className = 'mono font-semibold';
+            pct.style.color = quotaUsedColor(b.used_percent);
+            pct.textContent = `${Number(b.used_percent).toFixed(0)}%`;
+            labelRow.appendChild(label);
+            labelRow.appendChild(pct);
+            row.appendChild(labelRow);
+            row.appendChild(makeBucketBar(b.used_percent));
+            if (b.resets_at) {
+              const reset = document.createElement('div');
+              reset.className = 'text-[10px] mt-1';
+              reset.style.color = 'var(--color-muted)';
+              reset.textContent = `${t('resetsIn')} ${formatRelativeAgo(b.resets_at)}`;
+              row.appendChild(reset);
+            }
+            card.appendChild(row);
+          }
+        }
+
+        const statusRow = document.createElement('div');
+        statusRow.className = 'text-xs mt-2';
+        statusRow.style.borderTop = '1px solid var(--color-border)';
+        statusRow.style.paddingTop = '8px';
+        const dot = document.createElement('span');
+        dot.textContent = '● ';
+        dot.style.color = statusColor(block.status);
+        const statusLabel = document.createElement('span');
+        statusLabel.style.color = 'var(--color-muted)';
+        statusLabel.textContent = block.status || t('noData');
+        statusRow.appendChild(dot);
+        statusRow.appendChild(statusLabel);
+        card.appendChild(statusRow);
+
+        frag.appendChild(card);
+      }
+      container.replaceChildren(frag);
+    }
+
+    async function loadApis() {
+      try {
+        const payload = await fetchJsonWithRetry(appPath('/api/quota'));
+        lastApisPayload = payload;
+        apisLoaded = true;
+        renderApisCards(payload);
+      } catch (error) {
+        console.error('Error loading apis:', error);
+        if (lastApisPayload) renderApisCards(lastApisPayload);
+      }
+    }
+
+    function renderApisCards(payload) {
+      const container = document.getElementById('apisCards');
+      if (!container) return;
+      const providers = (payload && payload.providers) || {};
+      const frag = document.createDocumentFragment();
+      const apis = API_PROVIDERS
+        .map((name) => ({ name, block: providers[name] }))
+        .filter((entry) => entry.block);
+
+      if (!apis.length) {
+        container.replaceChildren(emptyCard('noData'));
+        return;
+      }
+
+      for (const { name, block } of apis) {
+        const card = document.createElement('div');
+        card.className = 'surface p-5';
+
+        const title = document.createElement('div');
+        title.className = 'flex items-center justify-between mb-3';
+        const titleText = document.createElement('span');
+        titleText.className = 'text-base font-extrabold mono';
+        titleText.textContent = name.charAt(0).toUpperCase() + name.slice(1);
+        const netBadge = document.createElement('span');
+        netBadge.className = 'text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded';
+        netBadge.style.background = block.network_enabled
+          ? 'color-mix(in srgb, var(--color-cost) 15%, transparent)'
+          : 'color-mix(in srgb, var(--color-muted) 15%, transparent)';
+        netBadge.style.color = block.network_enabled ? 'var(--color-cost)' : 'var(--color-muted)';
+        netBadge.textContent = block.network_enabled ? 'on' : 'off';
+        title.appendChild(titleText);
+        title.appendChild(netBadge);
+        card.appendChild(title);
+
+        // Balance: sum amount_remaining across buckets if present.
+        let balanceSum = null;
+        for (const b of block.buckets || []) {
+          if (b && b.amount_remaining !== null && b.amount_remaining !== undefined) {
+            balanceSum = (balanceSum || 0) + Number(b.amount_remaining);
+          }
+        }
+        const balanceRow = document.createElement('div');
+        balanceRow.className = 'flex items-center justify-between text-sm mb-2';
+        const balLabel = document.createElement('span');
+        balLabel.className = 'text-xs';
+        balLabel.style.color = 'var(--color-muted)';
+        balLabel.textContent = t('balance');
+        const balVal = document.createElement('span');
+        balVal.className = 'mono font-semibold';
+        balVal.style.color = 'var(--color-primary)';
+        balVal.textContent = balanceSum !== null ? formatCurrency(balanceSum) : t('noData');
+        balanceRow.appendChild(balLabel);
+        balanceRow.appendChild(balVal);
+        card.appendChild(balanceRow);
+
+        // Health + status rows.
+        const addMeta = (labelKey, value, color) => {
+          const row = document.createElement('div');
+          row.className = 'flex items-center justify-between text-sm mb-1';
+          const lab = document.createElement('span');
+          lab.className = 'text-xs';
+          lab.style.color = 'var(--color-muted)';
+          lab.textContent = t(labelKey);
+          const val = document.createElement('span');
+          val.className = 'mono text-xs font-semibold';
+          val.style.color = color || 'var(--color-text)';
+          val.textContent = value;
+          row.appendChild(lab);
+          row.appendChild(val);
+          card.appendChild(row);
+        };
+        addMeta('status', block.status || t('noData'), statusColor(block.status));
+        if (block.updated_at) {
+          addMeta('health', formatRelativeAgo(block.updated_at), 'var(--color-muted)');
+        }
+
+        frag.appendChild(card);
+      }
+      container.replaceChildren(frag);
+    }
+
+    async function loadModels() {
+      try {
+        const payload = await fetchJsonWithRetry(appPath('/api/suggest'));
+        lastModelsPayload = payload;
+        modelsLoaded = true;
+        renderModels(payload);
+      } catch (error) {
+        console.error('Error loading models:', error);
+        if (lastModelsPayload) renderModels(lastModelsPayload);
+      }
+    }
+
+    function renderModels(payload) {
+      const recsContainer = document.getElementById('modelsRecommendations');
+      const poolContainer = document.getElementById('modelsFreePool');
+      const tableContainer = document.getElementById('modelsScoredTable');
+      if (!recsContainer || !poolContainer || !tableContainer) return;
+
+      // --- Free-pool advice banner ---
+      const pool = payload.free_pool || { concurrency: 0, advice: '' };
+      const poolWrap = document.createElement('div');
+      poolWrap.className = 'flex items-center gap-3 p-3 rounded';
+      poolWrap.style.background = 'color-mix(in srgb, var(--color-primary) 8%, transparent)';
+      const poolIcon = document.createElement('span');
+      poolIcon.textContent = '●';
+      poolIcon.style.color = pool.concurrency > 0 ? 'var(--color-cost)' : '#D97706';
+      const poolText = document.createElement('div');
+      poolText.className = 'flex-1';
+      const poolAdvice = document.createElement('div');
+      poolAdvice.className = 'text-sm font-semibold';
+      poolAdvice.textContent = pool.advice || t('noData');
+      const poolLabel = document.createElement('div');
+      poolLabel.className = 'text-xs mt-0.5';
+      poolLabel.style.color = 'var(--color-muted)';
+      poolLabel.textContent = `${t('concurrency')}: ${pool.concurrency}`;
+      poolText.appendChild(poolAdvice);
+      poolText.appendChild(poolLabel);
+      poolWrap.appendChild(poolIcon);
+      poolWrap.appendChild(poolText);
+      poolContainer.replaceChildren(poolWrap);
+
+      // --- Alerts (if any) ---
+      const alerts = payload.alerts || [];
+      if (alerts.length) {
+        const alertFrag = document.createDocumentFragment();
+        for (const a of alerts) {
+          const el = document.createElement('div');
+          el.className = 'text-xs mt-2 px-2 py-1 rounded';
+          const color = a.level === 'crit' ? '#DC2626' : '#D97706';
+          el.style.background = `color-mix(in srgb, ${color} 12%, transparent)`;
+          el.style.color = color;
+          el.textContent = a.text;
+          alertFrag.appendChild(el);
+        }
+        poolWrap.appendChild(alertFrag);
+      }
+
+      // --- Recommendation cards ---
+      const recs = payload.recommendations || [];
+      if (!recs.length) {
+        recsContainer.replaceChildren(emptyCard('noData'));
+      } else {
+        const frag = document.createDocumentFragment();
+        for (const r of recs) {
+          const card = document.createElement('div');
+          card.className = 'surface p-5';
+
+          const head = document.createElement('div');
+          head.className = 'flex items-center justify-between mb-2';
+          const tier = document.createElement('span');
+          tier.className = 'text-base font-extrabold mono';
+          tier.textContent = r.tier || '';
+          const pickBadge = document.createElement('span');
+          pickBadge.className = 'text-[10px] font-semibold uppercase tracking-wide px-2 py-0.5 rounded';
+          pickBadge.style.background = r.pick
+            ? 'color-mix(in srgb, var(--color-cost) 15%, transparent)'
+            : 'color-mix(in srgb, var(--color-muted) 15%, transparent)';
+          pickBadge.style.color = r.pick ? 'var(--color-cost)' : '#D97706';
+          pickBadge.textContent = r.pick ? t('pick') : t('noData');
+          head.appendChild(tier);
+          head.appendChild(pickBadge);
+          card.appendChild(head);
+
+          const pickName = document.createElement('div');
+          pickName.className = 'text-sm font-semibold mono mb-1';
+          pickName.style.color = 'var(--color-primary)';
+          pickName.textContent = r.pick_name || '—';
+          card.appendChild(pickName);
+
+          const reason = document.createElement('div');
+          reason.className = 'text-xs mb-2';
+          reason.style.color = 'var(--color-muted)';
+          reason.textContent = r.reason || '';
+          card.appendChild(reason);
+
+          if (r.preferred) {
+            const pref = document.createElement('div');
+            pref.className = 'text-[10px] mb-1';
+            pref.style.color = 'var(--color-muted)';
+            pref.textContent = `${t('preferred')}: ${r.preferred}`;
+            card.appendChild(pref);
+          }
+
+          if (r.fallbacks && r.fallbacks.length) {
+            const fbRow = document.createElement('div');
+            fbRow.className = 'text-xs mt-2';
+            fbRow.style.borderTop = '1px solid var(--color-border)';
+            fbRow.style.paddingTop = '6px';
+            const fbLabel = document.createElement('span');
+            fbLabel.style.color = 'var(--color-muted)';
+            fbLabel.textContent = `${t('fallbacks')}: `;
+            const fbVals = document.createElement('span');
+            fbVals.className = 'mono';
+            fbVals.style.color = 'var(--color-text)';
+            fbVals.textContent = r.fallbacks.join(', ');
+            fbRow.appendChild(fbLabel);
+            fbRow.appendChild(fbVals);
+            card.appendChild(fbRow);
+          }
+
+          frag.appendChild(card);
+        }
+        recsContainer.replaceChildren(frag);
+      }
+
+      // --- Scored models table ---
+      const scored = payload.scored_models || [];
+      if (!scored.length) {
+        tableContainer.replaceChildren(emptyCard('noData'));
+      } else {
+        const table = document.createElement('table');
+        table.className = 'w-full text-xs';
+        const thead = document.createElement('thead');
+        const headRow = document.createElement('tr');
+        headRow.style.borderBottom = '1px solid var(--color-border)';
+        for (const col of [t('provider'), t('tier'), t('pick'), t('score'), t('available'), t('health')]) {
+          const th = document.createElement('th');
+          th.className = 'text-left font-semibold uppercase tracking-wide py-2 px-2';
+          th.style.color = 'var(--color-label)';
+          th.textContent = col;
+          headRow.appendChild(th);
+        }
+        thead.appendChild(headRow);
+        table.appendChild(thead);
+
+        const tbody = document.createElement('tbody');
+        for (const m of scored) {
+          const tr = document.createElement('tr');
+          tr.style.borderBottom = '1px solid var(--color-border)';
+          const addCell = (text, color) => {
+            const td = document.createElement('td');
+            td.className = 'py-1.5 px-2 mono';
+            td.style.color = color || 'var(--color-text)';
+            td.textContent = text;
+            tr.appendChild(td);
+          };
+          addCell(m.name || m.slug || '', 'var(--color-text)');
+          addCell(m.tier || '', 'var(--color-muted)');
+          addCell(m.slug || '', 'var(--color-primary)');
+          addCell(String(m.score ?? ''), m.available ? 'var(--color-cost)' : '#D97706');
+          addCell(m.available ? '✓' : '✗', m.available ? 'var(--color-cost)' : '#DC2626');
+          addCell(m.health || '', healthColor(m.health));
+          tbody.appendChild(tr);
+        }
+        table.appendChild(tbody);
+        tableContainer.replaceChildren(table);
+      }
+    }
+
     function formatPricingDbEditor() {
       try {
         const data = parsePricingDbEditor();
@@ -5595,6 +6147,9 @@
         if (tab === 'sessions') ensureSessionsLoaded();
         if (tab === 'quota' && !quotaLoaded) loadQuota();
         if (tab === 'pricing' && !pricingDbLoaded) loadPricingDb();
+        if (tab === 'subscriptions' && !subscriptionsLoaded) loadSubscriptions();
+        if (tab === 'apis' && !apisLoaded) loadApis();
+        if (tab === 'models' && !modelsLoaded) loadModels();
       });
     });
 

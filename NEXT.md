@@ -6,8 +6,9 @@ postmortem. Further post-resync work: ZenMux quota card added, then
 claude/zai/codex API replaced with omp.*
 
 ## Status
-- **618 tests pass, 0 fail, 7 skip** (7 skips include 3 codex-HUD removal,
-  3 ambient/snapshot fixtures, 1 codex session snapshot).
+- **694 tests pass, 0 fail, 7 skip** (+41 from Phase 1 scoring port; 7 skips
+  include 3 codex-HUD removal, 3 ambient/snapshot fixtures, 1 codex session
+  snapshot).
 - Branch: `main`, ahead of `upstream/main` (resolve with `git status -sb`).
 - Remote topology: `origin` → `github.com/asmartin-ai/kdash.git`, `upstream`
   → `github.com/JingbiaoMei/Tokdash.git`. Tagged `v1.3.1.kdash1`.
@@ -33,16 +34,23 @@ claude/zai/codex API replaced with omp.*
 2. **Kill browser auto-open** (the wrapper opens a tab every time `kdash`
    is called — see `~/bin/kdash` self-heal logic). Options in the
    investigation from 2026-07-21.
-3. **TypeScript migration — Phases 1–3** (plan:
-   `docs/TS-Rewrite-Plan-2026-07-28.md`). Measured gate: Bun starts in ~40 ms vs
-   the Python CLI's ~390 ms, and the gap is **FastAPI/uvicorn import cost**, not
-   kdash logic (its own modules import in 65 ms) — so the win is real for
-   CLI/TUI and absent for the long-lived server. Phases 1–3 (adopt the
-   prototype's scoring/suggest features; add Subscriptions/APIs/Models tabs;
-   ship the TS TUI) are pure gain and need no upstream-fork decision.
-   **Next:** open `src/tokdash/suggest.py` beside
-   `K:/Projects/llm-stack/kdash-ts-prototype/src/core/state.ts:20-87` and diff
-   the ranking logic.
+3. **TypeScript migration — Phases 1–3 DONE 2026-07-28/29** (plan:
+   `docs/TS-Rewrite-Plan-2026-07-28.md`).
+   - **Phase 1** (DONE): ported the prototype's `scoreModel`/`recommend`/
+     `freePoolView`/`runwayDays`/`alerts` into `src/tokdash/suggest.py` as an
+     **additive** layer — `build_suggest` and its existing contract untouched.
+     New keys on `/api/suggest`: `recommendations`, `free_pool`, `alerts`,
+     `scored_models`; plus `?tier=` filter. 41 new tests.
+   - **Phase 2** (DONE): added 3 new dashboard tabs — Subscriptions, APIs,
+     Models — rendered from existing `/api/quota` + `/api/suggest` (no new
+     endpoints). All labels use `data-i18n` (en+zh); all colours use
+     `var(--color-*)`; PWA untouched (single-shell cache). 8 tabs live,
+     browser-verified: tabs switch, i18n toggles to Chinese, theme toggles.
+   - **Phase 3** (DONE): shipped `K:/Projects/llm-stack/kdash-tui/` — a
+     dependency-free htop-style TUI polling the live API. 4 screens
+     (Overview/Subscriptions/APIs/Models). `bun build --compile` → single
+     binary; cold-start ~82ms (vs Python CLI ~390ms).
+   **Next:** Phase 4 is gated on G1 (permanent upstream fork) — see below.
 
 ## Icebox
 - **PR to upstream tokdash**: suggest reusing oh-my-pi's `omp usage --json`

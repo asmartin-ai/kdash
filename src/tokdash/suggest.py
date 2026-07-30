@@ -7,7 +7,7 @@ public /api/v1/models + generation billing (list rate = flow burn).
 from __future__ import annotations
 
 import os
-from datetime import date, datetime
+from datetime import date, datetime, timezone
 from typing import Any, Dict, List, Optional, Sequence
 
 
@@ -1020,3 +1020,507 @@ def format_glance_lines(
     lines.append("· ~0.4 fl / med M3 turn")
     lines.append("· claim IAMHC free credits daily")
     return lines
+
+
+# =============================================================================
+# Prototype scoring layer (Phase 1, ported 2026-07-28).
+#
+# The build_suggest() policy brain above is unchanged and remains the source of
+# the existing /api/suggest pick/fallbacks/tiers contract (consumed by the web
+# Suggest tab and the TUI SUGGEST rail in glance.py). The functions below port
+# the generic numeric scorer from kdash-ts-prototype/src/core/state.ts and are
+# surfaced as ADDITIONAL keys (recommendations / free_pool / alerts) on the
+# /api/suggest response. Existing keys and behaviour are untouched.
+#
+# Honest gaps vs the prototype (kdash has no telemetry producer for these yet):
+#   - latency_ms / error_rate default to 0  -> their penalty terms are no-ops.
+#   - spend_24h is not tracked anywhere     -> runway_days is None, runway
+#                                              alerts do not fire.
+#   - On the default persistent DB path, amount_remaining / expires_at are not
+#     stored (schema only persists 11 cols), so balance / funds_ok / expiry
+#     alerts are optimistic (None -> ok) rather than invented. The terms still
+#     engage the moment a fresh in-memory observation carries the field.
+# All ported rules are verbatim against state.ts:19-206; numbers always come
+# from the live engine, never from seeded mock data.
+# =============================================================================
+
+# Tier ladder for the recommend() loop. FREE is intentionally excluded here
+# (mirrors prototype types.ts TIERS): free-tier models surface only via
+# free_pool_view, never as a Recommendation.
+SCORE_TIERS: List[str] = ["T1", "T2", "T3", "VISION"]
+
+
+# Curated registry of models the scorer evaluates. kdash is provider-centric,
+# so there is no auto-discoverable model inventory; this list is the active set
+# and is the one maintenance surface for the scoring layer. Each entry carries
+# the fields kdash does NOT collect (tier / source / max_concurrency); runtime
+# fields (quota_pct, balance, cost_out, health, enabled) are joined at call
+# time from quota_state() / pricing_db.json in build_scored_state().
+#
+# `provider` is the kdash quota_state() provider key used to join live quota;
+# `pricing_slug` (defaults to slug) is the key looked up in pricing_db.json for
+# the cost_out (output rate) term.
+RegistryEntry = Dict[str, Any]
+DEFAULT_REGISTRY: List[RegistryEntry] = [
+    # --- FREE (free lanes, no balance draw) ---
+    {
+        "slug": "agnes-2.0-flash",
+        "name": "Agnes 2.0 Flash",
+        "provider": "agnes",
+        "tier": "FREE",
+        "source": "free",
+        "max_concurrency": 1,
+    },
+    {
+        "slug": "iamhc-default",
+        "name": "IAMHC free",
+        "provider": "iamhc",
+        "tier": "FREE",
+        "source": "free",
+        "max_concurrency": 1,
+    },
+    # --- T2 paid workhorse (ZenMux Starter subscription burn-first) ---
+    {
+        "slug": "minimax/minimax-m3",
+        "name": "MiniMax M3",
+        "provider": "zenmux",
+        "tier": "T2",
+        "source": "subscription",
+        "max_concurrency": 4,
+    },
+    {
+        "slug": "deepseek/deepseek-v4-flash",
+        "name": "DeepSeek V4 Flash",
+        "provider": "zenmux",
+        "tier": "T2",
+        "source": "subscription",
+        "max_concurrency": 4,
+    },
+    {
+        "slug": "qwen/qwen3.7-plus",
+        "name": "Qwen 3.7 Plus",
+        "provider": "zenmux",
+        "tier": "T2",
+        "source": "subscription",
+        "max_concurrency": 4,
+    },
+    {
+        "slug": "kuaishou/kat-coder-pro-v2",
+        "name": "KAT Coder Pro v2",
+        "provider": "zenmux",
+        "tier": "T2",
+        "source": "subscription",
+        "max_concurrency": 4,
+    },
+    # DeepSeek direct PAYG API — API-sourced, gated on funds_ok.
+    {
+        "slug": "deepseek/deepseek-v4-flash",
+        "name": "DeepSeek V4 Flash (PAYG)",
+        "provider": "deepseek",
+        "tier": "T2",
+        "source": "api",
+        "max_concurrency": 4,
+    },
+    # --- T3 escalate ---
+    {
+        "slug": "deepseek/deepseek-v4-pro",
+        "name": "DeepSeek V4 Pro",
+        "provider": "zenmux",
+        "tier": "T3",
+        "source": "subscription",
+        "max_concurrency": 2,
+    },
+    {
+        "slug": "claude-sonnet",
+        "name": "Claude (plan)",
+        "provider": "claude",
+        "tier": "T3",
+        "source": "subscription",
+        "max_concurrency": 2,
+    },
+    {
+        "slug": "codex-default",
+        "name": "Codex (plan)",
+        "provider": "codex",
+        "tier": "T3",
+        "source": "subscription",
+        "max_concurrency": 2,
+    },
+    # --- VISION (none wired today; recommend() reports the gap honestly) ---
+]
+
+
+def _pct(used: float, limit: float) -> float:
+    """Clamped percentage. Matches prototype format.ts pct(): 0 when limit<=0."""
+    if not limit or limit <= 0:
+        return 0.0
+    return max(0.0, min(100.0, (used / limit) * 100.0))
+
+
+def _days_until(unix_ts: Optional[int], now: Optional[float] = None) -> Optional[float]:
+    """Fractional days until a Unix timestamp. None on missing/invalid.
+
+    Mirrors prototype format.ts daysUntil (which can return negative for past
+    dates — alerts intentionally still fire).
+    """
+    if unix_ts is None:
+        return None
+    try:
+        ts = int(unix_ts)
+    except (TypeError, ValueError):
+        return None
+    base = now if now is not None else datetime.now(timezone.utc).timestamp()
+    return (ts - base) / 86400.0
+
+
+def score_model(m: Dict[str, Any], balance_by_provider: Dict[str, float]) -> Dict[str, Any]:
+    """Pure scoring: higher is better. Availability is a hard gate (a flag, not a
+    score-zeroer). Verbatim port of state.ts:20-38.
+
+    Input dict fields (defaults applied where kdash lacks telemetry):
+        quota_used, quota_limit -> quota_pct (0 when limit<=0)
+        health ("ok"|"degraded"|"down"), latency_ms (def 0), error_rate (def 0),
+        cost_out (def 0), source ("subscription"|"api"|"free"), provider,
+        enabled (def True).
+    """
+    quota_limit = float(m.get("quota_limit") or 0)
+    quota_used = float(m.get("quota_used") or 0)
+    quota_pct = _pct(quota_used, quota_limit) if quota_limit > 0 else 0.0
+    health = str(m.get("health") or "ok")
+    health_penalty = 0 if health == "ok" else (25 if health == "degraded" else 100)
+    provider = str(m.get("provider") or "")
+    source = str(m.get("source") or "api")
+    funds_ok = source != "api" or (balance_by_provider.get(provider, 0.0) > 0.5)
+    enabled = bool(m.get("enabled", True))
+    available = enabled and health != "down" and quota_pct < 97 and funds_ok
+
+    score = 100.0
+    score -= quota_pct * 0.55
+    score -= health_penalty
+    score -= min(20.0, float(m.get("latency_ms") or 0) / 200.0)
+    score -= min(20.0, float(m.get("error_rate") or 0) * 2.5)
+    score -= min(15.0, float(m.get("cost_out") or 0) * 0.35)
+    if source == "subscription":
+        score += 8  # sunk cost: burn it first
+    if source == "free":
+        score += 4
+    if not funds_ok:
+        score -= 60
+
+    out = dict(m)
+    out.update(
+        quota_pct=quota_pct,
+        available=available,
+        funds_ok=funds_ok,
+        score=max(0, round(score)),
+    )
+    return out
+
+
+def recommend(
+    scored_list: List[Dict[str, Any]],
+    preferences: Optional[Dict[str, str]] = None,
+) -> List[Dict[str, Any]]:
+    """Per-tier recommendation. Verbatim port of state.ts:40-70.
+
+    Returns one entry per tier in SCORE_TIERS with {tier, preferred, pick,
+    pick_name, reason, fallbacks}. pick/fallbacks hold slugs; pick_name is the
+    human name. FREE is excluded (surfaces via free_pool_view).
+    """
+    prefs = preferences or {}
+    out: List[Dict[str, Any]] = []
+    for tier in SCORE_TIERS:
+        candidates = sorted(
+            (m for m in scored_list if str(m.get("tier")) == tier),
+            key=lambda x: x.get("score", 0),
+            reverse=True,
+        )
+        preferred = prefs.get(f"pref.{tier}")
+        pref = next((m for m in candidates if m.get("slug") == preferred), None)
+        usable = [m for m in candidates if m.get("available")]
+        if pref and pref.get("available"):
+            pick = pref
+        elif usable:
+            pick = usable[0]
+        else:
+            pick = None
+
+        if pick is None:
+            reason = "no healthy model available in this tier"
+        elif pref and pick.get("slug") == pref.get("slug"):
+            reason = f"preferred model healthy ({round(100 - pick.get('quota_pct', 0))}% quota left)"
+        elif pref and not pref.get("available"):
+            reason = (
+                f"{pref.get('name')} unavailable ({pref.get('health')}, "
+                f"{round(pref.get('quota_pct', 0))}% quota used) -> failover"
+            )
+        else:
+            reason = "highest score by quota, health, latency and cost"
+
+        pick_slug = pick.get("slug") if pick else None
+        fallbacks = [
+            m.get("slug")
+            for m in usable
+            if m.get("slug") != pick_slug
+        ][:3]
+
+        out.append(
+            {
+                "tier": tier,
+                "preferred": preferred,
+                "pick": pick_slug,
+                "pick_name": pick.get("name") if pick else None,
+                "reason": reason,
+                "fallbacks": fallbacks,
+            }
+        )
+    return out
+
+
+def free_pool_view(scored_list: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Free-pool safe-concurrency estimate + graduated advice.
+
+    Verbatim port of state.ts:72-87. Concurrency = sum over AVAILABLE free-tier
+    models of max(0, round(max_concurrency * (1 if ok else 0.4) * (1 - quota_pct/100))).
+    """
+    pool = [m for m in scored_list if str(m.get("tier")) == "FREE"]
+    usable = [m for m in pool if m.get("available")]
+    total_concurrency = 0
+    for m in usable:
+        health_factor = 1 if str(m.get("health")) == "ok" else 0.4
+        total_concurrency += max(
+            0,
+            round(float(m.get("max_concurrency") or 0) * health_factor * (1 - float(m.get("quota_pct") or 0) / 100.0)),
+        )
+    healthy_count = sum(1 for m in pool if str(m.get("health")) == "ok")
+    if total_concurrency == 0:
+        advice = "free pool exhausted - do not spawn swarm agents"
+    elif total_concurrency < 8:
+        advice = f"spawn at most {total_concurrency} free agents; keep retries low"
+    else:
+        advice = f"safe to fan out ~{total_concurrency} free agents across {len(usable)} endpoints"
+    return {
+        "models": pool,
+        "concurrency": total_concurrency,
+        "healthy_count": healthy_count,
+        "advice": advice,
+    }
+
+
+def runway_days(balance: Optional[float], spend_24h: Optional[float]) -> Optional[float]:
+    """balance / spend_24h rounded to 1 decimal; None when spend_24h <= 0.
+
+    Verbatim port of state.ts:142.
+    """
+    if not balance or not spend_24h or spend_24h <= 0:
+        return None
+    return round(balance / spend_24h, 1)
+
+
+def build_alerts(
+    subs: List[Dict[str, Any]],
+    apis: List[Dict[str, Any]],
+) -> List[Dict[str, str]]:
+    """Flat alert list. Verbatim port of state.ts:194-206.
+
+    subs:  [{plan, pct, window_label, expires_at}, ...]
+    apis:  [{provider, health, latency_ms, runway_days, trial_ends_at}, ...]
+    Dates are Unix timestamps (seconds); None means unknown and suppresses the
+    corresponding alert (mirrors daysUntil null behavior).
+    """
+    alerts: List[Dict[str, str]] = []
+    for s in subs:
+        pct_val = s.get("pct")
+        if pct_val is not None and float(pct_val) >= 85:
+            alerts.append(
+                {
+                    "level": "crit",
+                    "text": f"{s.get('plan')}: {float(pct_val):.0f}% of {s.get('window_label') or 'window'} used",
+                }
+            )
+        d = _days_until(s.get("expires_at"))
+        if d is not None and d < 3:
+            alerts.append(
+                {
+                    "level": "warn",
+                    "text": f"{s.get('plan')} renews/expires in {d:.1f}d",
+                }
+            )
+    for a in apis:
+        if str(a.get("health")) != "ok":
+            alerts.append(
+                {
+                    "level": "warn",
+                    "text": f"{a.get('provider')} API {a.get('health')} ({a.get('latency_ms') or 0}ms)",
+                }
+            )
+        runway = a.get("runway_days")
+        if runway is not None and runway < 10:
+            alerts.append(
+                {
+                    "level": "crit",
+                    "text": f"{a.get('provider')} balance runway {runway}d at current burn",
+                }
+            )
+        t = _days_until(a.get("trial_ends_at"))
+        if t is not None and t < 5:
+            alerts.append(
+                {
+                    "level": "warn",
+                    "text": f"{a.get('provider')} free trial ends in {t:.1f}d",
+                }
+            )
+    return alerts
+
+
+def _health_from_provider_block(block: Optional[Dict[str, Any]]) -> str:
+    """Map a quota_state() provider block to the health enum ok|degraded|down."""
+    if not isinstance(block, dict):
+        return "ok"  # provider not observed: optimistic (no telemetry == ok)
+    status = str(block.get("status") or "").lower()
+    if status == "ok":
+        return "ok"
+    if status in {"unavailable", "disabled", "error"}:
+        return "down"
+    return "degraded"  # stale, estimated, local_plan, etc.
+
+
+def _peak_from_block(block: Optional[Dict[str, Any]]) -> Optional[float]:
+    """Peak used_percent across a provider block's buckets (None if unknown)."""
+    if not isinstance(block, dict):
+        return None
+    buckets = block.get("buckets")
+    if not isinstance(buckets, list):
+        return None
+    peak: Optional[float] = None
+    for b in buckets:
+        if not isinstance(b, dict):
+            continue
+        used = b.get("used_percent")
+        if used is None:
+            continue
+        try:
+            v = float(used)
+        except (TypeError, ValueError):
+            continue
+        if peak is None or v > peak:
+            peak = v
+    return peak
+
+
+def _balance_by_provider_from_quota(quota: Dict[str, Any]) -> Dict[str, float]:
+    """Sum amount_remaining per provider from quota_state() bucket rows.
+
+    On the default persistent DB path amount_remaining is not stored, so this is
+    frequently {} (-> funds_ok optimistic). It engages on the in-memory path and
+    whenever a fresh snapshot carried a balance.
+    """
+    out: Dict[str, float] = {}
+    providers = quota.get("providers") or {}
+    if not isinstance(providers, dict):
+        return out
+    for name, block in providers.items():
+        if not isinstance(block, dict):
+            continue
+        for b in block.get("buckets") or []:
+            if not isinstance(b, dict):
+                continue
+            amount = b.get("amount_remaining")
+            if amount is None:
+                continue
+            try:
+                out[name] = out.get(name, 0.0) + float(amount)
+            except (TypeError, ValueError):
+                continue
+    return out
+
+
+def _cost_out_for(slug: str, pricing_db: Any) -> float:
+    """Look up the output rate ($/M tokens) for a slug from pricing_db.json.
+
+    Returns 0.0 when unknown (cost term becomes a no-op rather than invented).
+    """
+    if pricing_db is None:
+        return 0.0
+    try:
+        rate = pricing_db._resolve_pricing(slug)  # private but stable API
+    except Exception:
+        return 0.0
+    if not isinstance(rate, dict):
+        return 0.0
+    try:
+        return float(rate.get("output") or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def build_scored_state(
+    quota: Dict[str, Any],
+    *,
+    registry: Optional[List[RegistryEntry]] = None,
+    pricing_db: Any = None,
+    preferences: Optional[Dict[str, str]] = None,
+    subs: Optional[List[Dict[str, Any]]] = None,
+    apis: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """I/O bridge: join the curated registry to live quota/pricing and run the
+    prototype scorer. Returns the additive keys for /api/suggest:
+
+        generated_at, recommendations, free_pool {concurrency, advice},
+        alerts, scored_models
+    """
+    reg = registry if registry is not None else DEFAULT_REGISTRY
+    providers = quota.get("providers") if isinstance(quota, dict) else None
+    if not isinstance(providers, dict):
+        providers = {}
+    balance_by_provider = _balance_by_provider_from_quota(quota)
+
+    scored: List[Dict[str, Any]] = []
+    for entry in reg:
+        slug = str(entry.get("slug") or "")
+        provider_key = str(entry.get("provider") or "")
+        block = providers.get(provider_key)
+        peak = _peak_from_block(block)
+        # quota_used/quota_limit reconstruction: peak IS the used percentage, so
+        # set quota_limit=100, quota_used=peak to feed score_model faithfully.
+        if peak is not None:
+            quota_used = float(peak)
+            quota_limit = 100.0
+        else:
+            quota_used = 0.0
+            quota_limit = 0.0  # _pct -> 0 when limit<=0 (no observation)
+        health = _health_from_provider_block(block)
+        enabled = bool(block.get("network_enabled", True)) if isinstance(block, dict) else True
+        cost_out = _cost_out_for(entry.get("pricing_slug") or slug, pricing_db)
+        model = {
+            "slug": slug,
+            "name": entry.get("name") or slug,
+            "provider": provider_key,
+            "tier": str(entry.get("tier") or "T2"),
+            "source": str(entry.get("source") or "api"),
+            "max_concurrency": int(entry.get("max_concurrency") or 1),
+            "quota_used": quota_used,
+            "quota_limit": quota_limit,
+            "health": health,
+            "enabled": enabled,
+            "latency_ms": 0,   # not tracked by kdash yet
+            "error_rate": 0.0,  # not tracked by kdash yet
+            "cost_out": cost_out,
+        }
+        scored.append(score_model(model, balance_by_provider))
+    scored.sort(key=lambda x: x.get("score", 0), reverse=True)
+
+    recommendations = recommend(scored, preferences)
+    pool = free_pool_view(scored)
+    alerts = build_alerts(subs or [], apis or [])
+
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
+        "recommendations": recommendations,
+        "free_pool": {
+            "concurrency": pool["concurrency"],
+            "advice": pool["advice"],
+        },
+        "alerts": alerts,
+        "scored_models": scored,
+    }
