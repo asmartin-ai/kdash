@@ -6,6 +6,16 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 
 ## Unreleased
 
+### Added
+
+- Added Amp thread usage parsing from explicit `amp threads export` JSON
+  snapshots, with configurable export roots and no implicit network access.
+- Added scored model recommendations and the Subscriptions, APIs, and Models
+  dashboard views.
+- Added quota collection through `omp usage --json` for Anthropic, Codex, and
+  Z.ai subscriptions.
+
+
 ## 1.3.1 - 2026-07-17
 
 ### Fixed
