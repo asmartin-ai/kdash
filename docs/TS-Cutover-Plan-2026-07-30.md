@@ -121,13 +121,24 @@ Each phase ships standalone value; stopping at any boundary leaves us better off
 - **Done when:** a fresh install of the TS service can be set up, health-checked,
   updated, and uninstalled with no Python present.
 
-### Phase C — Make TS the primary dashboard (size M, non-destructive)
-- Complete the §5 verification matrix (below) against the Bun server.
-- Install the TS service on `:55423`, replacing `pythonw -m tokdash serve`.
-  Keep the Python checkout on disk as fallback + upstream anchor.
-- Retire Python `glance` in favour of the compiled `kdash-tui` binary (B4).
-- **Done when:** the user's daily driver is the Bun service; Python is unused
-  but present. **This is the safe stopping point if G1 = no.**
+### Phase C — Make TS the primary dashboard ✅ DONE 2026-07-31
+- **§5 matrix verified:** API sweep 8/8 routes structurally MATCH (tools/
+  usage/openclaw route-layer `period`+`timestamp` added to TS; the only
+  diffs are Python-internal `response_cache` and the glance-only narrative
+  keys on `/api/suggest` which the browser UI does not consume). Guarded
+  writes verified: 403 evil-host/no-token, persist with loopback+token.
+  Browser matrix: 6/8 tabs clean (Overview, Stats, Pricing, Subscriptions,
+  APIs, Models — free-pool banner ~10, T3 picks Claude); Sessions + Quota
+  fixed (sessions date-range 400 bug, `date.getTime` on epoch-ms). CLI verbs:
+  all 10 work (added `version`).
+- **TS service installed on :55423** replacing the Python supervisor
+  (`TokdashTSSupervisor` task → `supervisor-ts.pyw` → `bun src/cli.ts
+  serve`). Python stays on disk; rollback = re-enable `TokdashSupervisor`.
+- **Caveats:** (1) the winsched installer's LogonTrigger can only be created
+  from an interactive session (schtasks denies it in non-interactive shells)
+  — the TS task currently has a one-shot trigger; needs an interactive
+  `setup` re-run for logon durability. (2) XML encoding fix: schtasks
+  requires UTF-16 LE task files (both stacks' installers fixed).
 
 ### Phase D — Delete Python (size S, destructive, gated) — requires explicit go
 - Only after G1 = yes and every gate below is green.
