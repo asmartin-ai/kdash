@@ -5970,7 +5970,13 @@
         recsContainer.replaceChildren(emptyCard('noData'));
       } else {
         const frag = document.createDocumentFragment();
+        const scoredForTiers = payload.scored_models || [];
         for (const r of recs) {
+          // Skip tiers with no registered candidates: FREE lanes surface in the
+          // pool banner and VISION is unwired, so a "no healthy model" card
+          // there is misleading. Tiers that HAVE models but none available
+          // (e.g. all quota-maxed) still render their honest empty state.
+          if (!r.pick && !scoredForTiers.some((m) => String(m.tier || '') === String(r.tier || ''))) continue;
           const card = document.createElement('div');
           card.className = 'surface p-5';
 
@@ -6029,7 +6035,7 @@
 
           frag.appendChild(card);
         }
-        recsContainer.replaceChildren(frag);
+        recsContainer.replaceChildren(frag.childNodes.length ? frag : emptyCard('noData'));
       }
 
       // --- Scored models table ---

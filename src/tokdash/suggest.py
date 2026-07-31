@@ -1454,6 +1454,29 @@ def _cost_out_for(slug: str, pricing_db: Any) -> float:
         return 0.0
 
 
+def _free_pool_output(
+    pool: Dict[str, Any], live_concurrency: Optional[int]
+) -> Dict[str, Any]:
+    """Assemble the /api/suggest free_pool block.
+
+    When a live free-pool concurrency signal is available it takes precedence
+    over the static registry estimate: the registry's two free lanes are long
+    dead, while the real pool is a rotating local LiteLLM proxy. ``None`` keeps
+    the registry estimate unchanged, so the pure scorer and its differential
+    tests are never affected by live infrastructure.
+    """
+    if live_concurrency is None:
+        return {"concurrency": pool["concurrency"], "advice": pool["advice"]}
+    c = max(0, int(live_concurrency))
+    if c == 0:
+        advice = "free pool exhausted - do not spawn swarm agents"
+    elif c < 8:
+        advice = f"spawn at most {c} free agents; keep retries low"
+    else:
+        advice = f"safe to fan out ~{c} free agents across the live pool"
+    return {"concurrency": c, "advice": advice}
+
+
 def build_scored_state(
     quota: Dict[str, Any],
     *,
@@ -1462,6 +1485,7 @@ def build_scored_state(
     preferences: Optional[Dict[str, str]] = None,
     subs: Optional[List[Dict[str, Any]]] = None,
     apis: Optional[List[Dict[str, Any]]] = None,
+    free_pool_concurrency: Optional[int] = None,
 ) -> Dict[str, Any]:
     """I/O bridge: join the curated registry to live quota/pricing and run the
     prototype scorer. Returns the additive keys for /api/suggest:
@@ -1517,10 +1541,7 @@ def build_scored_state(
     return {
         "generated_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "recommendations": recommendations,
-        "free_pool": {
-            "concurrency": pool["concurrency"],
-            "advice": pool["advice"],
-        },
+        "free_pool": _free_pool_output(pool, free_pool_concurrency),
         "alerts": alerts,
         "scored_models": scored,
     }

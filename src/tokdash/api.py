@@ -1108,7 +1108,17 @@ def get_suggest(refresh: bool = False, tier: Optional[str] = None) -> Dict[str, 
                 pricing_db = _PRICING_DB
             except Exception:
                 pricing_db = None
-            scored = build_scored_state(q_for_score, pricing_db=pricing_db)
+            # Live free-pool signal: the scorer's static free lanes are dead;
+            # the real pool is a local rotating proxy. None -> registry estimate.
+            try:
+                from .sources.free_pool import free_pool_swarm_concurrency
+
+                fp_concurrency = free_pool_swarm_concurrency()
+            except Exception:
+                fp_concurrency = None
+            scored = build_scored_state(
+                q_for_score, pricing_db=pricing_db, free_pool_concurrency=fp_concurrency
+            )
             payload["recommendations"] = scored["recommendations"]
             payload["free_pool"] = scored["free_pool"]
             payload["alerts"] = scored["alerts"]

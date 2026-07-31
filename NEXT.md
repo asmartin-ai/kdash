@@ -1,28 +1,34 @@
 # NEXT — kdash
 
 ## Current focus
-- Python remains the runnable reference for the TypeScript strangler migration.
-- Phase 5 is complete: all 11 coding-tool parsers have TS counterparts.
-- Phase 6 is complete locally: quota, storage, compute, sessions, stack/update,
-  CLI/server, static assets, and dashboard routes run on Bun.
-- Verification baseline: Python 694 pass/7 skip; TypeScript 179 pass/0 fail.
+- Target decided: **full cutover to TypeScript, retiring Python** — but a safe
+  deletion is multi-phase. Route + gates: `docs/TS-Cutover-Plan-2026-07-30.md`.
+- Python remains the runnable reference until the cutover plan's deletion gate
+  is green. Do not delete `src/tokdash` before then.
+- Verification baseline: Python 694 pass / 7 skip; TypeScript 178 pass / 1 known
+  date flake (see plan §4).
 
 ## Next actions
-1. Export representative Amp data into `~/.amp/exports` and acquire real
-   corpora for Codex, Gemini, Antigravity, Kimi, Copilot, Hermes, and Mimo.
-2. Run the Bun dashboard against those corpora and verify every browser tab,
-   session detail path, guarded write, and CLI command end to end.
-3. Decide Phase 7 only after that evidence: keep Python as fallback or approve
-   its retirement explicitly.
+1. **Restart the live dashboard service** (`pythonw -m tokdash serve` on :55423)
+   to pick up today's free-pool + recommendations fixes — currently running
+   pre-edit code in memory.
+2. Cutover Phase A: fix the `stack` day-count differential flake (plan §4) and
+   convert the differential suite to golden fixtures so TS tests survive without
+   Python.
+3. Cutover Phase B: port the onboard/service lifecycle (setup/doctor/update/
+   uninstall + winsched installer) to kdash-ts — the biggest gap.
 
 ## Open decisions
-- Publication candidates requiring per-PR approval: omp quota, ZCode parser,
-  and Zed parser.
-- Distribution for `kdash-ts` and `kdash-tui` remains undecided.
+- **G1 (blocks deletion):** accept permanent severance of the `JingbiaoMei/Tokdash`
+  upstream fork? Deletion is downstream of an explicit "yes".
+- Distribution for the TS runtime (`bun build --compile` vs a bun service unit).
+- Publication candidates still needing per-PR approval: omp quota, ZCode parser,
+  Zed parser (worthless after fork severance — file first if ever).
 
 ## Caveats / icebox
-- Amp reads explicit `amp threads export` snapshots; it never logs in or polls.
-- Existing unrelated cleanup: browser auto-open behavior and the pre-resync
-  backup branch/tag. Destructive removal still requires explicit approval.
+- **Amp deprecated** 2026-07-30: unregistered from the tracker (no `~/.amp` here).
+  Parser code + tests retained, git-reversible; excluded from the parity gate.
+- Free-pool signal reads `K:/Projects/free-pool/state.json` (override
+  `TOKDASH_FREE_POOL_STATE`); returns None → static registry estimate.
 - Internal package rename and optional TUI enhancements remain deferred.
 - Derive branch, remote, worktree, and push state with Git; do not freeze it here.

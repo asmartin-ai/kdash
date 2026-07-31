@@ -2496,7 +2496,6 @@ class CodingToolsUsageTracker:
             "claude": ClaudeParser(self.pricing_db),
             "gemini_cli": GeminiCLIParser(self.pricing_db),
             "antigravity_cli": AntigravityCLIParser(self.pricing_db),
-            "amp": AmpParser(self.pricing_db),
             "kimi": KimiParser(self.pricing_db),
             "pi_agent": PiAgentParser(self.pricing_db),
             "copilot_cli": CopilotCLIParser(self.pricing_db),
