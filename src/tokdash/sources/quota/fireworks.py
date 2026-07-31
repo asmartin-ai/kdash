@@ -64,7 +64,10 @@ def collect_fireworks_api_snapshots(
     if not acc.startswith("accounts/"):
         acc = "accounts/" + acc
 
-    end = datetime.now(timezone.utc)
+    # 30d billing window from the SAME injectable clock as captured_at; a
+    # live wall-clock read here made differential fixtures churn on every
+    # re-record (test pins `now`, TS pins `clock`).
+    end = datetime.fromtimestamp(captured_at, timezone.utc)
     start = end - timedelta(days=30)
     start_iso = start.strftime("%Y-%m-%dT%H:%M:%SZ")
     end_iso = end.strftime("%Y-%m-%dT%H:%M:%SZ")
