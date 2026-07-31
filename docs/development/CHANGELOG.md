@@ -15,6 +15,17 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/).
 - Added quota collection through `omp usage --json` for Anthropic, Codex, and
   Z.ai subscriptions.
 
+### Removed (2026-07-31 — see `docs/WEB_GUI_RETIREMENT.md`)
+
+- Web dashboard removed entirely: kdash is TUI-only. `static/` (index.html,
+  themes, PWA assets), CSRF/write endpoints, and the pricing-db editor are
+  gone; the loopback API on `127.0.0.1:55423` and the TUI remain.
+- Migrated to the TUI: usage panel, Sessions explorer, ASCII Stats heatmaps,
+  quota-refresh key, update badge, 24h quota-history sparklines.
+- Added `litellm_proxy` and `zcode` usage parsers, pricing entries for
+  `qwen3.8-max-preview` and `macaron-v1-venti`, and a Novita balance quota
+  collector (free-pool proxy logs usage to `~/.tokdash/litellm-proxy-usage.jsonl`).
+
 
 ## 1.3.1 - 2026-07-17
 

@@ -1,5 +1,8 @@
 # Web GUI Retirement — kdash is TUI-only (2026-07-31)
 
+> Snapshot as of 2026-07-31. Records the removal decision and its follow-ups;
+> current repo state (branches, tips, push status) is derived from git, not this file.
+
 The browser dashboard (`kdash-ts/static/index.html` + assets) and its
 browser-write machinery were removed on 2026-07-31. kdash is now consumed
 entirely through the terminal UI (`kdash-tui`) and the loopback HTTP API
