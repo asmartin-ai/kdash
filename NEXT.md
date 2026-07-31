@@ -7,13 +7,14 @@
   is green. Do not delete `src/tokdash` before then.
 - **Phase A complete (2026-07-31):** stack date flake fixed (DST-immune UTC
   day math, `kdash-ts 379ea32`); differential suite converted to golden
-  fixtures (`4b41d07`) — TS tests pass with `TOKDASH_NO_PYTHON=1` (166 pass /
-  16 live-corpus skip). Verification baseline: Python 694 pass / 7 skip;
-  TypeScript 182 pass / 0 fail.
+  fixtures (`4b41d07`) — TS tests pass with `TOKDASH_NO_PYTHON=1`. Verification
+  baseline: Python 694 pass / 7 skip; TypeScript 220 pass / 0 fail.
+- **Phase B in progress:** `doctor` + `update` ported to kdash-ts (parity
+  verified vs Python); `setup`/`uninstall` (winsched) in flight; distribution
+  decision pending.
 
 ## Next actions
-1. **Phase B: port the onboard/service lifecycle** to kdash-ts (setup/doctor/
-   update/uninstall + winsched installer) — the biggest remaining gap.
+1. Finish `setup`/`uninstall` (winsched) in kdash-ts (dry-run verified).
 2. Decide distribution: `bun build --compile` binary vs a bun service unit.
 3. After Phase B/C: install the TS service on :55423 replacing the Python one,
    then the G1 + deletion-gate decision (Phase D).
