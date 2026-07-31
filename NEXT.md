@@ -1,35 +1,31 @@
 # NEXT — kdash
 
 ## Current focus
-- Target decided: **full cutover to TypeScript, retiring Python** — but a safe
-  deletion is multi-phase. Route + gates: `docs/TS-Cutover-Plan-2026-07-30.md`.
-- **Phase C complete (2026-07-31):** the TS service now serves :55423
-  (TokdashTSSupervisor → supervisor-ts.pyw → bun). Python stays on disk as
-  fallback (rollback: re-enable TokdashSupervisor task). Baseline: Python
-  694 pass / 7 skip; TypeScript 227 pass / 0 fail.
-- **Phase D (delete Python) is the remaining phase** — gated on G1 + deletion
-  gate (§5). Do not delete `src/tokdash` before then.
+- **Cutover COMPLETE (2026-07-31):** Python retired, fork severed, kdash-ts is
+  the sole runtime serving :55423. Decision record + verification evidence:
+  `docs/TS-Cutover-Plan-2026-07-30.md` (marked complete).
+- Python preservation: tag `python-retired-1.3.1` + branch `python-retired`
+  (pushed to origin) pin the final Python tree; 119 commits remain in history.
+- This repo is now documentation/scripts only (no Python package).
 
 ## Next actions
-1. Run `bun src/cli.ts setup --auto` from an INTERACTIVE terminal so the
-   winsched task gets a LogonTrigger (non-interactive shells are denied
-   logon-trigger creation) — gives the TS service reboot durability.
-2. Decide **G1** (upstream-fork severance) — the gate to Phase D.
-3. When G1 = yes and the deletion gate is green, remove `src/tokdash` +
-   tests + upstream remote (explicit approval required).
+1. **Logon durability:** from an interactive terminal run
+   `bun src/cli.ts setup --auto` (in the kdash-ts repo) so the winsched task
+   gets a LogonTrigger — currently one-shot (non-interactive shells are denied
+   logon-trigger creation). The live service otherwise stays up via
+   `supervisor-ts.pyw` on-demand.
+2. Retire the dead `TokdashSupervisor` scheduled task + `scripts/supervisor.pyw`
+   (Python rollback path is now moot) — needs explicit approval.
+3. Consider filing the three forfeited upstream PRs as standalone TS features
+   (omp quota, ZCode parser, Zed parser) if wanted.
 
 ## Open decisions
-- **G1 (blocks deletion):** accept permanent severance of the `JingbiaoMei/Tokdash`
-  upstream fork? Deletion is downstream of an explicit "yes".
-- Publication candidates still needing per-PR approval: omp quota, ZCode parser,
-  Zed parser (worthless after fork severance — file first if ever).
+- Nothing blocking. Deferred: internal package rename, TUI enhancements,
+  distribution of kdash-tui beyond the local exe.
 
 ## Caveats / icebox
-- **Amp deprecated** 2026-07-30: unregistered from the tracker (no `~/.amp` here).
-  Parser code + tests retained, git-reversible; excluded from the parity gate.
-- Free-pool signal reads `K:/Projects/free-pool/state.json` (override
-  `TOKDASH_FREE_POOL_STATE`); returns None → static registry estimate.
-- winsched task XML must be UTF-16 LE (both stacks' installers fixed 2026-07-31);
-  LogonTrigger creation needs an interactive shell.
-- Internal package rename and optional TUI enhancements remain deferred.
+- winsched task XML must be UTF-16 LE (schtasks rejects UTF-8); LogonTrigger
+  creation needs an interactive shell (environmental, both stacks).
+- Live-corpus differential tests need `TOKDASH_LIVE_CORPUS=1` + a Python
+  install (retired reference; opt-in by design).
 - Derive branch, remote, worktree, and push state with Git; do not freeze it here.
