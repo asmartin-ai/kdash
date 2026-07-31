@@ -124,12 +124,17 @@ def _collect_roles(catalog: dict | None) -> dict:
     return {"status": "ok", "roles": roles}
 
 
-def _collect_expiries(catalog: dict | None) -> dict:
-    """Extract deadline entries from catalog.calendar, excluding stamps."""
+def _collect_expiries(catalog: dict | None, today: date | None = None) -> dict:
+    """Extract deadline entries from catalog.calendar, excluding stamps.
+
+    ``today`` defaults to the local date; tests inject a fixed value so the
+    day-count is deterministic (mirrors the TS ``collectExpiries(now)``).
+    """
     if catalog is None:
         return {"status": "unavailable", "reason": "catalog not loaded"}
 
-    today = date.today()
+    if today is None:
+        today = date.today()
     deadlines: list[dict] = []
     for entry in catalog.get("calendar", []):
         if entry.get("date_kind") != "deadline":
