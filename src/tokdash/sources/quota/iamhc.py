@@ -99,8 +99,10 @@ def collect_iamhc_api_snapshots(
     except (TypeError, ValueError):
         total_usage = None
 
-    # Compute Beijing off-peak window.
-    now_utc = datetime.now(timezone.utc)
+    # Compute Beijing off-peak window from the SAME injectable clock as
+    # captured_at (the differential harness pins `now`; a live wall-clock
+    # read here made fixtures drift and the snapshot internally inconsistent).
+    now_utc = datetime.fromtimestamp(captured_at, timezone.utc)
     bj_hour = _beijing_hour(now_utc)
     offpeak = _is_offpeak(bj_hour)
 
