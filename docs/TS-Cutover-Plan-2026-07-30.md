@@ -108,7 +108,9 @@ Each phase ships standalone value; stopping at any boundary leaves us better off
 - **Bonus parity bugs found & fixed by the fixture harness:** `iamhc`
   beijing_hour and `fireworks` 30d-window both read a live wall clock instead
   of the injected `now` (TS + Python) — fixtures now deterministic.
-- `update` port in flight; `setup`/`uninstall` + winsched installer remain.
+- **`update` ported** (2026-07-31): `src/core/update.ts` + `tests/update.test.ts`
+  (17 dispatch tests); no-manifest guidance byte-identical to Python.
+- `setup`/`uninstall` + winsched installer remain (the OS-touching slice).
 - **Next action:** finish `update`, then port winsched installer + setup.
 - **Done when:** a fresh install of the TS service can be set up, health-checked,
   updated, and uninstalled with no Python present.
