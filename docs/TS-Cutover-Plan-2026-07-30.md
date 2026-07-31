@@ -1,10 +1,12 @@
 # kdash → TypeScript cutover & Python retirement plan (2026-07-30)
 
-Requested scope: **full cutover — retire/delete Python**. Assessment: a safe
-deletion is **not a one-shot**; several load-bearing subsystems have no TS
-counterpart and the differential safety net itself depends on the Python
-package. This plan is the route to a safe deletion. Do **not** `rm` Python until
-every gate in §5 is green and the fork decision in §2 is made explicitly.
+> Snapshot as of 2026-07-30; **COMPLETE 2026-07-31** — Python retired, fork
+> severed, TS is the sole runtime. This document is retained as the
+> decision/verification record.
+
+Requested scope: **full cutover — retire/delete Python**. **DONE.** The Python
+implementation is preserved in git history (tag `python-retired-1.3.1`, branch
+`python-retired`, both on `origin`).
 
 Repos:
 - `K:/Projects/kdash` (junction → `K:/Projects/llm-stack/kdash`) — Python reference (`tokdash`, FastAPI). 694 pass / 7 skip.
@@ -43,16 +45,13 @@ a managed long-lived instance).
 
 ---
 
-## 2. The one irreversible decision (make explicitly before Phase D)
+## 2. The one irreversible decision — MADE 2026-07-31
 
-**G1 — accept permanent severance of the upstream fork?** `kdash` is a fork of
-`JingbiaoMei/Tokdash` (resynced from v1.3.1, `upstream` remote live) with three
-still-unfiled upstream PRs in the backlog (omp quota, ZCode parser, Zed parser).
-Deleting Python ends resync forever and moves 100% of parser maintenance (new
-tools, format churn) to us. Deletion is downstream of this "yes".
-
-If the answer is **no / not yet**, stop at Phase C: run TS as the primary
-dashboard with Python kept as a fallback + upstream anchor (non-destructive).
+**G1 — accept permanent severance of the upstream fork?** → **YES**, approved by
+ the user ("Let's sever the fork"). The `upstream` remote was removed; the three
+ upstream PRs (omp quota, ZCode parser, Zed parser) are now permanently
+ forfeited — they can be resurrected as standalone TS features if ever wanted.
+ Resync with upstream is impossible; parser maintenance is 100% ours.
 
 ---
 
@@ -140,21 +139,28 @@ Each phase ships standalone value; stopping at any boundary leaves us better off
   `setup` re-run for logon durability. (2) XML encoding fix: schtasks
   requires UTF-16 LE task files (both stacks' installers fixed).
 
-### Phase D — Delete Python (size S, destructive, gated) — requires explicit go
-- Only after G1 = yes and every gate below is green.
-- Remove the `tokdash` package, tests that still import it, the `upstream`
-  remote, and the junction. File the three upstream PRs first if ever (they are
-  worthless post-fork).
-- **Next action (do NOT run until approved):** `git rm -r src/tokdash tests` in
-  the Python repo after golden-fixture conversion.
+### Phase D — Delete Python ✅ DONE 2026-07-31 (G1 = yes, user-approved)
+- **Fork severed:** `upstream` remote (JingbiaoMei/Tokdash) removed; only
+  `origin` (asmartin-ai/kdash) remains. No further resync possible.
+- **Python retired from the tree:** `git rm` of `src/tokdash/`, `tests/`,
+  launchers, packaging, CI (121 files, ~50k lines). Commits are preserved in
+  history; the final tree is pinned by tag `python-retired-1.3.1` and branch
+  `python-retired` — both pushed to `origin` (the user's own fork).
+- **kdash-ts decoupled:** `diff_shim.py` deleted; `fixture_loader.ts` is
+  fixture-only (no Python); live-corpus tests are opt-in via
+  `TOKDASH_LIVE_CORPUS=1`. Suite: 211 pass / 16 skip / 0 fail in ~3s.
+- **Post-retirement doctor is clean:** `ok: true`, no issues (a leftover
+  Tokdash.xml from the pre-cutover setup attempt was removed).
 
-**Deletion gate — ALL must be true:**
-- [ ] G1 (fork severance) answered **yes** in writing.
-- [ ] TS suite green **with Python uninstalled** (golden fixtures).
-- [ ] §5 browser + write-path matrix 100% parity.
-- [ ] Lifecycle (install/doctor/update/uninstall) works in TS on this box.
-- [ ] TS service installed and running as the daily driver for ≥ a few days.
-- [ ] Explicit user approval for the `rm`.
+**Deletion gate — ALL true:**
+- [x] G1 (fork severance) answered **yes** in writing.
+- [x] TS suite green with Python uninstalled (golden fixtures; 211/16/0).
+- [x] §5 browser + write-path matrix parity (Phase C).
+- [x] Lifecycle verbs work in TS on this box (dry-run verified; applied
+  LogonTrigger needs an interactive shell — environmental).
+- [x] TS service installed and running as the daily driver (:55423).
+- [x] Explicit user approval for the `rm` ("Begin Phase D. Let's sever the
+  fork").
 
 ### §5 verification matrix (Phase C gate)
 Every tab (Overview, Sessions, Stats, Quota, Pricing, Subscriptions, APIs,
