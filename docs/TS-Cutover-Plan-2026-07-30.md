@@ -100,11 +100,16 @@ Each phase ships standalone value; stopping at any boundary leaves us better off
   cannot freeze); they skip in offline mode rather than fail.
 - **Next action:** Phase B — port the onboard/service lifecycle to kdash-ts.
 
-### Phase B — Port the lifecycle (size L) — the real work
-- Port B1 (`setup/doctor/update/uninstall`) and B2 (winsched installer, the one
-  this box uses) to `kdash-ts`. launchd/systemd/tailscale only if wanted.
-- Decide B3 distribution; produce the artifact.
-- **Next action:** port `winsched.py` → `kdash-ts` + a `bun src/cli.ts setup`.
+### Phase B — Port the lifecycle (in progress)
+- **`doctor` ported** (2026-07-31, kdash-ts `: doctor` verb): `src/core/detect.ts`
+  (environment/service/port detection) + `src/core/doctor.ts` (report assembly,
+  issue logic, quota block) + `tests/doctor.test.ts` (21 unit tests). Key-level
+  parity vs `python -m tokdash doctor --json` verified on this box.
+- **Bonus parity bugs found & fixed by the fixture harness:** `iamhc`
+  beijing_hour and `fireworks` 30d-window both read a live wall clock instead
+  of the injected `now` (TS + Python) — fixtures now deterministic.
+- `update` port in flight; `setup`/`uninstall` + winsched installer remain.
+- **Next action:** finish `update`, then port winsched installer + setup.
 - **Done when:** a fresh install of the TS service can be set up, health-checked,
   updated, and uninstalled with no Python present.
 
