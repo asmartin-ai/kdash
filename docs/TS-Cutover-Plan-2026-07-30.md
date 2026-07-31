@@ -110,7 +110,13 @@ Each phase ships standalone value; stopping at any boundary leaves us better off
   of the injected `now` (TS + Python) — fixtures now deterministic.
 - **`update` ported** (2026-07-31): `src/core/update.ts` + `tests/update.test.ts`
   (17 dispatch tests); no-manifest guidance byte-identical to Python.
-- `setup`/`uninstall` + winsched installer remain (the OS-touching slice).
+- **`setup` + `uninstall` (winsched) ported** (2026-07-31): `winsched.ts`
+  (XML render with X-Tokdash-Managed marker, schtasks lifecycle), `plan.ts`
+  (plan assembly), `lifecycle.ts` (orchestration), `tests/setup.test.ts`
+  (7 tests). Dry-run plan byte-compatible with Python; applied schtasks paths
+  gated behind non-dry-run and verified via stubbed CaptureFn only.
+- **Remaining Phase B:** B3 distribution decision (`bun build --compile` vs a
+  bun service unit) — the gate to installing the TS service on :55423.
 - **Next action:** finish `update`, then port winsched installer + setup.
 - **Done when:** a fresh install of the TS service can be set up, health-checked,
   updated, and uninstalled with no Python present.
