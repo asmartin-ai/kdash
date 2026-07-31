@@ -63,47 +63,19 @@
 
 - **Exact token counts**: Input/Output/Cache token breakdowns
 - **Statusline integration** *[new]*: drop a live token-usage indicator into Claude Code's statusline (or any agent that can hit a local HTTP endpoint) — see [Statusline integration](#statusline-integration)
-- **Contribution calendar**: 2D heatmap + 3D isometric view with Tokens/Cost/Messages metrics
-- **Session explorer**: per-session drill-down
-- **Quota tab** *[new]*: subscription window bars with reset countdowns for Codex, Claude Code, and Antigravity. Codex windows work out of the box from local logs; Codex reset credits, metered features, and all Claude/Antigravity quota need opt-in [live polling](#quota-tracking-optional)
-- **Themes and app polish**: 10 style themes, light/dark mode, and PWA install support
+- **Contribution calendar**: ASCII month + year heatmaps in the Stats screen
+- **Session explorer**: per-session drill-down in the Sessions screen
+- **Quota tracking**: subscription window bars with reset countdowns for Codex, Claude Code, and Antigravity. Codex windows work out of the box from local logs; Codex reset credits, metered features, and all Claude/Antigravity quota need opt-in [live polling](#quota-tracking-optional)
+- **TUI**: 7-screen terminal UI (kdash-tui) — Overview, Subscriptions, APIs, Models, Pool, Sessions, Stats
+- **Free-pool lens**: LiteLLM free-pool lanes and swarm sizing surfaced in the Pool screen
 
 <p align="center">
-  <b>Overview</b><br />
-  <a href="https://tokdash.github.io/demo/">
-    <img src="https://raw.githubusercontent.com/JingbiaoMei/Tokdash/main/docs/assets/demo-overview-en.png" alt="Tokdash overview dashboard - click for live demo" width="860" />
-  </a>
+  <b>kdash-tui</b> — the terminal UI: Overview, Subscriptions, APIs, Models, Pool, Sessions, and Stats screens
 </p>
-<p align="center">
-  <b>Sessions</b><br />
-  <a href="https://tokdash.github.io/demo/">
-    <img src="https://raw.githubusercontent.com/JingbiaoMei/Tokdash/main/docs/assets/demo-session-en.png" alt="Tokdash sessions view - click for live demo" width="860" />
-  </a>
-</p>
-<p align="center">
-  <b>Monthly usage heatmap</b><br />
-  <a href="https://tokdash.github.io/demo/">
-    <img src="https://raw.githubusercontent.com/JingbiaoMei/Tokdash/main/docs/assets/demo-heatmap-en.png" alt="Tokdash monthly usage heatmap - click for live demo" width="860" />
-  </a>
-</p>
-<p align="center">
-  <b>Yearly usage heatmap</b><br />
-  <a href="https://tokdash.github.io/demo/">
-    <img src="https://raw.githubusercontent.com/JingbiaoMei/Tokdash/main/docs/assets/demo-heatmap-year-en.png" alt="Tokdash yearly usage heatmap - click for live demo" width="860" />
-  </a>
-</p>
-<p align="center">
-  <b>Quota tracking</b><br />
-  <a href="https://tokdash.github.io/demo/">
-    <img src="https://raw.githubusercontent.com/JingbiaoMei/Tokdash/main/docs/assets/demo-quota-en.png" alt="Tokdash quota tracking - click for live demo" width="860" />
-  </a>
-</p>
-<p align="center">
-  <b>Codex quota and reset credits</b><br />
-  <a href="https://tokdash.github.io/demo/">
-    <img src="https://raw.githubusercontent.com/JingbiaoMei/Tokdash/main/docs/assets/demo-quota-codex-en.png" alt="Tokdash Codex quota and reset credits - click for live demo" width="440" />
-  </a>
-</p>
+
+> The web dashboard was retired on 2026-07-31. kdash is now TUI-only; the loopback HTTP API
+> (`kdash-ts serve` on `127.0.0.1:55423`) still backs the TUI and the statusline scripts.
+> See [`docs/WEB_GUI_RETIREMENT.md`](docs/WEB_GUI_RETIREMENT.md) for what was removed and why.
 
 ## Quick start
 
@@ -141,12 +113,12 @@ tokdash setup
 ```
 
 The wizard configures a reversible user-level background service when the platform supports
-one, then prints the dashboard URL (default: `http://127.0.0.1:55423`). If no supported
+one, then prints the API URL (default: `http://127.0.0.1:55423`). If no supported
 service manager is available, it records setup state and prints foreground run guidance. It
 uses localhost-first defaults, does not require `sudo` for the local service, and keeps your
 usage history unless you later uninstall with `--purge`.
 
-To expose the dashboard explicitly on all network interfaces with writes disabled, run
+To expose the API explicitly on all network interfaces with writes disabled, run
 `tokdash setup --bind 0.0.0.0`; review the [remote-access guide](docs/guides/REMOTE_ACCESS.md) first.
 
 For a non-interactive setup from an agent, script, or bundle:
@@ -225,7 +197,7 @@ instead keep the pipx runtime and upgrade with `tokdash update` or `pipx upgrade
 Tokdash stays loopback-bound by default. Interactive `tokdash setup` can configure Tailscale
 Serve after explicit confirmation, providing private HTTPS read access from Windows or another
 tailnet device. Use SSH forwarding when you need authenticated write access. An explicit
-`--bind 0.0.0.0` provides read-only network access but exposes the unauthenticated dashboard on
+`--bind 0.0.0.0` provides read-only network access but exposes the unauthenticated API on
 every reachable interface.
 
 See **[`docs/guides/REMOTE_ACCESS.md`](docs/guides/REMOTE_ACCESS.md)** for setup commands, WSL2 guidance,
@@ -239,7 +211,8 @@ If you only want a one-off foreground process:
 tokdash serve
 ```
 
-Open `http://127.0.0.1:55423`. Use `tokdash serve --port <port>` if the default port is busy.
+Open `http://127.0.0.1:55423` with a plain HTTP client, or run `kdash-tui` in a terminal.
+Use `tokdash serve --port <port>` if the default port is busy.
 
 For full onboarding details, including runtime choices, WSL/systemd behavior, macOS launchd,
 Tailscale, bundling, update checks, and safe uninstall semantics, see
@@ -329,18 +302,19 @@ For remote access through Tailscale Serve, SSH forwarding, or an explicit networ
 [`docs/guides/REMOTE_ACCESS.md`](docs/guides/REMOTE_ACCESS.md). Interactive `tokdash setup` can configure and
 record the Tailscale Serve rule after you opt in.
 
-By default `tokdash serve` opens the dashboard in your browser once on startup. Pass `--no-open` to disable this (it is also skipped automatically in headless/SSH environments and in the background service templates).
+`tokdash serve` runs the loopback API only — there is no browser UI to open. The TUI
+(`kdash-tui`) and the statusline scripts are the supported consumers.
 
 ## Privacy & security
 
 - **No telemetry**: Tokdash does not intentionally send your data anywhere.
 - **Local parsing**: usage is computed from local session files (see [supported clients](docs/reference/SUPPORTED_CLIENTS.md)).
-- **Optional quota polling**: the Quota tab is local-only by default. Per-provider API polling can be enabled from the tab or with `tokdash quota consent`; it uses your local CLI credentials only to call that provider's own quota endpoint, and stores responses in the local usage SQLite DB.
+- **Optional quota polling**: quota views are local-only by default. Per-provider API polling can be enabled in `~/.tokdash/config.json` (`quota.*` keys) or with `tokdash quota consent`; it uses your local CLI credentials only to call that provider's own quota endpoint, and stores responses in the local usage SQLite DB.
 - **Server exposure**: Tokdash binds to `127.0.0.1` by default. Tailscale Serve provides private read-only access, SSH forwarding provides authenticated write access, and `--bind 0.0.0.0` explicitly exposes unauthenticated reads on every interface. See the [remote-access guide](docs/guides/REMOTE_ACCESS.md).
 
 ### Quota tracking (optional)
 
-The Quota tab shows subscription utilization windows and reset timers, from two data sources. **Local logs** (no network): Codex records its own quota in session files, so the Codex 5-hour/weekly windows work out of the box — but they update only when you use Codex, and the logs never contain reset credits or metered-feature windows. Treat session-log Codex consumption as an **estimate that can be materially wrong**: each session caches its quota snapshot at its last fetch and replays it unchanged on every later message, so the numbers can be stale, and reset-boundary noise can occasionally distort a window further — the Quota tab labels these charts as estimated. **Live polling** (off by default, per-provider consent): Tokdash calls the provider's own quota endpoint with the sign-in your CLI already has — fresher, adds Codex reset credits and metered features, is required for **accurate** Codex consumption, and is the *only* source for Claude Code and Antigravity quota:
+The quota view shows subscription utilization windows and reset timers, from two data sources. **Local logs** (no network): Codex records its own quota in session files, so the Codex 5-hour/weekly windows work out of the box — but they update only when you use Codex, and the logs never contain reset credits or metered-feature windows. Treat session-log Codex consumption as an **estimate that can be materially wrong**: each session caches its quota snapshot at its last fetch and replays it unchanged on every later message, so the numbers can be stale, and reset-boundary noise can occasionally distort a window further — these charts are labeled as estimated. **Live polling** (off by default, per-provider consent): Tokdash calls the provider's own quota endpoint with the sign-in your CLI already has — fresher, adds Codex reset credits and metered features, is required for **accurate** Codex consumption, and is the *only* source for Claude Code and Antigravity quota:
 
 ```bash
 tokdash quota consent --codex-api on --claude-api on --antigravity-api on
@@ -350,9 +324,9 @@ tokdash quota poll
 tokdash quota show
 ```
 
-**Master switch.** `quota.enabled` (default on) turns *all* quota work on or off — session scanning, network polling, and snapshot writes. Toggle it from the Quota tab or with `tokdash quota consent --enabled on|off`. When it is off (or the `TOKDASH_QUOTA_POLL=0` kill switch is set), the background poller idles completely, `GET /api/quota/refresh` returns a "quota tracking disabled" error, and the tab shows an *enable quota tracking* card instead of data. Per-provider consent keys keep their narrower network-only meaning.
+**Master switch.** `quota.enabled` (default on) turns *all* quota work on or off — session scanning, network polling, and snapshot writes. Toggle it in `~/.tokdash/config.json` (`quota.enabled`) or with `tokdash quota consent --enabled on|off`. When it is off (or the `TOKDASH_QUOTA_POLL=0` kill switch is set), the background poller idles completely, `GET /api/quota/refresh` returns a "quota tracking disabled" error.
 
-**Poll interval.** The background poller snapshots every **30 minutes** by default. Choose 15/30/60/120 minutes from the Quota tab, during `tokdash setup`, or with `tokdash quota consent --poll-interval N`; it is saved as `quota.poll_interval_minutes` in `config.json`. The `TOKDASH_QUOTA_POLL_INTERVAL` env var (seconds, floor 300) overrides the saved value, and the tab shows which source is active. Interval changes apply on the next poll cycle without restarting the server. Codex session ingestion is incremental — after a one-time backfill of your history, each cycle only tail-reads session files that grew, so a steady-state poll costs single-digit milliseconds.
+**Poll interval.** The background poller snapshots every **30 minutes** by default. Choose 15/30/60/120 minutes during `tokdash setup`, or with `tokdash quota consent --poll-interval N`; it is saved as `quota.poll_interval_minutes` in `config.json`. The `TOKDASH_QUOTA_POLL_INTERVAL` env var (seconds, floor 300) overrides the saved value. Interval changes apply on the next poll cycle without restarting the server. Codex session ingestion is incremental — after a one-time backfill of your history, each cycle only tail-reads session files that grew, so a steady-state poll costs single-digit milliseconds.
 
 For fixed-reset quota windows, the poller also samples near the reset boundary so history captures the pre-reset high and post-reset baseline. Boundary sampling is enabled by default, calls only the provider whose window triggered it, coalesces nearby provider boundaries, and keeps at least 300 seconds between daemon poll cycles. Set `TOKDASH_QUOTA_BOUNDARY_POLL=0` to disable it, `TOKDASH_QUOTA_BOUNDARY_POST=0` to disable only post-reset samples, or adjust the default 120-second leads with `TOKDASH_QUOTA_BOUNDARY_PRE_SECONDS` and `TOKDASH_QUOTA_BOUNDARY_POST_SECONDS`.
 
@@ -360,7 +334,7 @@ When enabled, Tokdash reads credentials from `$CODEX_HOME/auth.json`, Claude's `
 
 `tokdash setup` offers an optional quota step (per-provider network consent, default No, plus the poll interval), and `tokdash doctor` reports the quota state: master switch, per-provider consent, kill switch, effective interval and its source, last poll time, and the stored snapshot count.
 
-Quota snapshots and their history live in the local usage database (`usage.sqlite3`, enabled by default) and are **kept indefinitely by default** — set `TOKDASH_QUOTA_RETENTION_DAYS` to a positive number of days to prune older snapshots. If you opt out of local persistence with `TOKDASH_USAGE_DB=0`, the Quota tab loses its main data path: no snapshot history is kept, the background poller does not run, and the tab only shows in-memory results from a manual **Refresh** (network providers with consent) for the lifetime of the current server process. Keep the usage DB enabled (the default) for normal quota tracking.
+Quota snapshots and their history live in the local usage database (`usage.sqlite3`, enabled by default) and are **kept indefinitely by default** — set `TOKDASH_QUOTA_RETENTION_DAYS` to a positive number of days to prune older snapshots. If you opt out of local persistence with `TOKDASH_USAGE_DB=0`, the quota view loses its main data path: no snapshot history is kept, the background poller does not run, and only in-memory results from a manual **refresh** (network providers with consent) are available for the lifetime of the current server process. Keep the usage DB enabled (the default) for normal quota tracking.
 
 ## API (local)
 
@@ -383,7 +357,7 @@ Full API reference: [`docs/reference/API.md`](docs/reference/API.md) — schema,
 
 ## Cost Accuracy Note
 
-Token counts depend on what each client logs locally. Costs are computed from the bundled pricing database (`src/tokdash/pricing_db.json`) by default, or from your saved dashboard pricing override at `<data_dir>/pricing_db.json` when present (the Pricing tab writes there and it fully replaces the bundled rates). Either way they may lag real provider pricing — use as an estimate and verify against your billing source if it matters.
+Token counts depend on what each client logs locally. Costs are computed from the bundled pricing database (`src/core/pricing_db.json`) by default, or from your saved override at `<data_dir>/pricing_db.json` when present (the file fully replaces the bundled rates). Either way they may lag real provider pricing — use as an estimate and verify against your billing source if it matters.
 
 ## History retention
 
@@ -423,6 +397,7 @@ Full documentation lives in **[`docs/`](docs/README.md)** (start at the index), 
 tokdash/
 ├── main.py                 # Source entrypoint (python3 main.py)
 ├── tokdash                 # Source CLI wrapper (./tokdash serve)
+├── kdash-tui               # Terminal UI (K:/Projects/llm-stack/kdash-tui)
 ├── src/
 │   └── tokdash/
 │       ├── cli.py
@@ -434,13 +409,10 @@ tokdash/
 │       ├── assets.py             # Static asset management
 │       ├── model_normalization.py
 │       ├── pricing_db.json
-│       ├── sources/
+│       └── sources/
 │       │   ├── openclaw.py       # OpenClaw session log parser
 │       │   └── coding_tools.py   # Local coding tools parsers
-│       └── static/
-│           ├── index.html        # Single-page dashboard
-│           ├── theme-config.js   # Theme palettes & heatmap colors
-│           └── themes.css        # Per-theme CSS overrides
+│       └── static/ (removed 2026-07-31 — web GUI retired; see docs/WEB_GUI_RETIREMENT.md)
 └── docs/                   # Documentation — see docs/README.md for the index
     ├── guides/             # Onboarding, remote access, statusline, background service
     ├── reference/          # API reference, supported clients, history retention
