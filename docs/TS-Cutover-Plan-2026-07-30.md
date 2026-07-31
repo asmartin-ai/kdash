@@ -88,13 +88,17 @@ and under forced TZ; full TS suite 181 pass / 0 fail.
 
 Each phase ships standalone value; stopping at any boundary leaves us better off.
 
-### Phase A — Lock parity (size S)
-- Fix B4-date bug (§4); make the stack differential deterministic.
-- Convert the differential suite to **golden fixtures** (B5): snapshot every
-  Python `diff_shim` output to committed JSON; switch TS tests to compare
-  against fixtures, not a live Python import.
-- **Next action:** fix `collectExpiries` day math + add fixed-`now` test.
-- **Done when:** `bun test` is green with the Python package uninstalled.
+### Phase A — Lock parity ✅ DONE 2026-07-31 (kdash-ts `4b41d07`)
+- ~~Fix B4-date bug~~ (§4 above) and ~~convert the differential suite to golden
+  fixtures~~: `tests/fixture_loader.ts` + 170 committed fixtures under
+  `tests/.fixtures/`; record mode `TOKDASH_RECORD_FIXTURES=1`, offline mode
+  `TOKDASH_NO_PYTHON=1` (live-corpus tests skip).
+- Verified: `bun test` 182 pass/0 fail with Python; **166 pass / 16 skip / 0
+  fail with `TOKDASH_NO_PYTHON=1`** — the suite survives the Python package
+  being unimportable.
+- Note: `parser_collect`/`sessions_data` stay live-corpus (real user data,
+  cannot freeze); they skip in offline mode rather than fail.
+- **Next action:** Phase B — port the onboard/service lifecycle to kdash-ts.
 
 ### Phase B — Port the lifecycle (size L) — the real work
 - Port B1 (`setup/doctor/update/uninstall`) and B2 (winsched installer, the one
