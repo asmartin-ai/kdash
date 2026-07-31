@@ -5,18 +5,18 @@
   deletion is multi-phase. Route + gates: `docs/TS-Cutover-Plan-2026-07-30.md`.
 - Python remains the runnable reference until the cutover plan's deletion gate
   is green. Do not delete `src/tokdash` before then.
-- Verification baseline: Python 694 pass / 7 skip; TypeScript 178 pass / 1 known
-  date flake (see plan §4).
+- **Phase A complete (2026-07-31):** stack date flake fixed (DST-immune UTC
+  day math, `kdash-ts 379ea32`); differential suite converted to golden
+  fixtures (`4b41d07`) — TS tests pass with `TOKDASH_NO_PYTHON=1` (166 pass /
+  16 live-corpus skip). Verification baseline: Python 694 pass / 7 skip;
+  TypeScript 182 pass / 0 fail.
 
 ## Next actions
-1. **Restart the live dashboard service** (`pythonw -m tokdash serve` on :55423)
-   to pick up today's free-pool + recommendations fixes — currently running
-   pre-edit code in memory.
-2. Cutover Phase A: fix the `stack` day-count differential flake (plan §4) and
-   convert the differential suite to golden fixtures so TS tests survive without
-   Python.
-3. Cutover Phase B: port the onboard/service lifecycle (setup/doctor/update/
-   uninstall + winsched installer) to kdash-ts — the biggest gap.
+1. **Phase B: port the onboard/service lifecycle** to kdash-ts (setup/doctor/
+   update/uninstall + winsched installer) — the biggest remaining gap.
+2. Decide distribution: `bun build --compile` binary vs a bun service unit.
+3. After Phase B/C: install the TS service on :55423 replacing the Python one,
+   then the G1 + deletion-gate decision (Phase D).
 
 ## Open decisions
 - **G1 (blocks deletion):** accept permanent severance of the `JingbiaoMei/Tokdash`
